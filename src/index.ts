@@ -1,16 +1,20 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import { OcService } from "./services/oc";
+import { ContextService } from "./services/context";
 
-const programLayer = Layer.mergeAll(OcService.Default);
+const programLayer = Layer.mergeAll(OcService.Default, ContextService.Default);
 
 const program = Effect.gen(function* () {
-  yield* Effect.log("this will be interesting soon I think");
+  yield* Effect.log("STARTING UP...");
 
+  const context = yield* ContextService;
   const oc = yield* OcService;
 
+  yield* context.cloneOrUpdateReposLocally();
+
   yield* oc.testPrompting(
-    "How do I write a hello world program in elixir? Don't write it, just explain how to do it."
+    "How do I use the new query remote function to fetch data in sveltekit?"
   );
 }).pipe(
   Effect.provide(programLayer),

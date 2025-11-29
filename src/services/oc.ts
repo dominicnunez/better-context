@@ -1,6 +1,7 @@
 import { createOpencode } from "@opencode-ai/sdk";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
 import { TaggedError } from "effect/Data";
+import { ConfigService } from "./config";
 
 class OcError extends TaggedError("OcError")<{
   readonly message: string;
@@ -8,10 +9,15 @@ class OcError extends TaggedError("OcError")<{
 }> {}
 
 const ocService = Effect.gen(function* () {
+  const config = yield* ConfigService;
+  const agentPromptPath = yield* config.getDocsAgentPromptPath();
+  const configObject = yield* config.getOpenCodeConfig({ agentPromptPath });
+
   const { client, server } = yield* Effect.tryPromise({
     try: () =>
       createOpencode({
         port: 3420,
+        config: configObject,
       }),
     catch: (err) =>
       new OcError({ message: "FAILED TO CREATE OPENCODE CLIENT", cause: err }),
@@ -38,14 +44,21 @@ const ocService = Effect.gen(function* () {
           );
         }
 
-        const resp = yield* Effect.promise(() => {
-          return client.session.prompt({
+        yield* Effect.log(`PROMPTING WITH: ${prompt}`);
+
+        const resp = yield* Effect.promise(() =>
+          client.session.prompt({
             path: { id: session.data.id },
             body: {
+              agent: "docs",
+              model: {
+                providerID: "opencode",
+                modelID: "claude-haiku-4-5",
+              },
               parts: [{ type: "text", text: prompt }],
             },
-          });
-        });
+          })
+        );
 
         if (resp.error) {
           return yield* Effect.fail(
@@ -56,9 +69,13 @@ const ocService = Effect.gen(function* () {
           );
         }
 
-        resp.data.parts.map((part) => {
-          console.log(part);
+        resp.data.parts.forEach((part) => {
+          if (part.type === "text") {
+            console.log(part.text);
+          }
         });
+
+        console.log("\n--- PROMPT COMPLETE ---");
 
         return null;
       }),
@@ -67,4 +84,5 @@ const ocService = Effect.gen(function* () {
 
 export class OcService extends Effect.Service<OcService>()("OcService", {
   scoped: ocService,
+  dependencies: [ConfigService.Default],
 }) {}
