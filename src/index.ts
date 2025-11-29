@@ -28,7 +28,7 @@ const program = Effect.gen(function* () {
   const context = yield* ContextService;
   const oc = yield* OcService;
 
-  yield* context.cloneOrUpdateReposLocally();
+  yield* context.cloneOrUpdateAllReposLocally();
 
   const eventStream = yield* oc.testPrompting(
     "How does effect.tap work? When would I want to use it?"

@@ -14,8 +14,13 @@ class OcError extends TaggedError("OcError")<{
 
 export type { Event as OcEvent };
 
-const streamSessionEvents = (client: OpencodeClient, sessionID: string) =>
+const streamSessionEvents = (args: {
+  client: OpencodeClient;
+  sessionID: string;
+}) =>
   Effect.gen(function* () {
+    const { client, sessionID } = args;
+
     const events = yield* Effect.tryPromise({
       try: () => client.event.subscribe(),
       catch: (err) =>
@@ -43,44 +48,46 @@ const streamSessionEvents = (client: OpencodeClient, sessionID: string) =>
     );
   });
 
-const firePrompt = (
-  client: OpencodeClient,
-  sessionID: string,
-  text: string,
-  errorDeferred: Deferred.Deferred<never, OcError>
-) =>
+const firePrompt = (args: {
+  client: OpencodeClient;
+  sessionID: string;
+  text: string;
+  errorDeferred: Deferred.Deferred<never, OcError>;
+}) =>
   Effect.promise(() =>
-    client.session.prompt({
-      path: { id: sessionID },
+    args.client.session.prompt({
+      path: { id: args.sessionID },
       body: {
         agent: "docs",
         model: {
           providerID: "opencode",
           modelID: "claude-haiku-4-5",
         },
-        parts: [{ type: "text", text }],
+        parts: [{ type: "text", text: args.text }],
       },
     })
   ).pipe(
     Effect.catchAll((err) =>
       Deferred.fail(
-        errorDeferred,
+        args.errorDeferred,
         new OcError({ message: String(err), cause: err })
       )
     )
   );
 
-const streamPrompt = (
-  client: OpencodeClient,
-  sessionID: string,
-  prompt: string
-): Effect.Effect<Stream.Stream<Event, OcError>, OcError> =>
+const streamPrompt = (args: {
+  client: OpencodeClient;
+  sessionID: string;
+  prompt: string;
+}) =>
   Effect.gen(function* () {
-    const eventStream = yield* streamSessionEvents(client, sessionID);
+    const { client, sessionID, prompt } = args;
+
+    const eventStream = yield* streamSessionEvents({ client, sessionID });
 
     const errorDeferred = yield* Deferred.make<never, OcError>();
 
-    yield* firePrompt(client, sessionID, prompt, errorDeferred).pipe(
+    yield* firePrompt({ client, sessionID, text: prompt, errorDeferred }).pipe(
       Effect.forkDaemon
     );
 
@@ -143,7 +150,7 @@ const ocService = Effect.gen(function* () {
         const sessionID = session.data.id;
         yield* Effect.log(`PROMPTING WITH: ${prompt}`);
 
-        return yield* streamPrompt(client, sessionID, prompt);
+        return yield* streamPrompt({ client, sessionID, prompt });
       }),
   };
 });

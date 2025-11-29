@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { TaggedError } from "effect/Data";
-import { ConfigService } from "./config.ts";
+import { ConfigService, type Repo, type RepoName } from "./config.ts";
 import { expandHome } from "../lib/utils.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -10,9 +10,10 @@ class ContextError extends TaggedError("ContextError")<{
   readonly cause?: unknown;
 }> {}
 
-const cloneRepo = (repoDir: string, url: string, branch: string) =>
+const cloneRepo = (args: { repoDir: string; url: string; branch: string }) =>
   Effect.tryPromise({
     try: async () => {
+      const { repoDir, url, branch } = args;
       const proc = Bun.spawn(
         ["git", "clone", "--branch", branch, url, repoDir],
         {
@@ -29,9 +30,10 @@ const cloneRepo = (repoDir: string, url: string, branch: string) =>
       new ContextError({ message: "Failed to clone repo", cause: error }),
   });
 
-const pullRepo = (repoDir: string, branch: string) =>
+const pullRepo = (args: { repoDir: string; branch: string }) =>
   Effect.tryPromise({
     try: async () => {
+      const { repoDir, branch } = args;
       const proc = Bun.spawn(["git", "pull", "origin", branch], {
         cwd: repoDir,
         stdout: "inherit",
@@ -64,33 +66,44 @@ const ensureDirectory = (dir: string) =>
       new ContextError({ message: "Failed to create directory", cause: error }),
   });
 
+const cloneOrUpdate = (args: { repo: Repo; reposDirectory: string }) =>
+  Effect.gen(function* () {
+    const { repo, reposDirectory } = args;
+
+    const repoDir = path.join(reposDirectory, repo.name);
+    const branch = repo.branch ?? "main";
+
+    const exists = yield* directoryExists(repoDir);
+    if (exists) {
+      yield* Effect.log(`Pulling latest changes for ${repo.name}...`);
+      yield* pullRepo({ repoDir, branch });
+    } else {
+      yield* Effect.log(`Cloning ${repo.name}...`);
+      yield* cloneRepo({ repoDir, url: repo.url, branch });
+    }
+    yield* Effect.log(`Done with ${repo.name}`);
+  });
+
 const contextService = Effect.gen(function* () {
   const config = yield* ConfigService;
+
+  const configDirectory = yield* config.getConfigDirectory();
+  const reposDirectory = expandHome(`${configDirectory}/repos`);
+
+  yield* ensureDirectory(reposDirectory);
+
   return {
-    cloneOrUpdateReposLocally: () =>
+    cloneOrUpdateOneRepoLocally: (repoName: RepoName) =>
       Effect.gen(function* () {
-        const configDirectory = yield* config.getConfigDirectory();
-        const reposDirectory = expandHome(`${configDirectory}/repos`);
-
-        yield* ensureDirectory(reposDirectory);
-
+        const repo = yield* config.getRepo(repoName);
+        yield* cloneOrUpdate({ repo, reposDirectory });
+      }),
+    cloneOrUpdateAllReposLocally: () =>
+      Effect.gen(function* () {
         const repos = yield* config.getAllRepos();
 
         const operations = repos.map((repo) => {
-          const repoDir = path.join(reposDirectory, repo.name);
-          const branch = repo.branch ?? "main";
-
-          return Effect.gen(function* () {
-            const exists = yield* directoryExists(repoDir);
-            if (exists) {
-              yield* Effect.log(`Pulling latest changes for ${repo.name}...`);
-              yield* pullRepo(repoDir, branch);
-            } else {
-              yield* Effect.log(`Cloning ${repo.name}...`);
-              yield* cloneRepo(repoDir, repo.url, branch);
-            }
-            yield* Effect.log(`Done with ${repo.name}`);
-          });
+          return cloneOrUpdate({ repo, reposDirectory });
         });
 
         yield* Effect.all(operations, { concurrency: "unbounded" });

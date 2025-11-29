@@ -16,7 +16,7 @@ class ConfigError extends TaggedError("ConfigError")<{
   readonly cause?: unknown;
 }> {}
 
-type Repo = {
+export type Repo = {
   name: string;
   url: string;
   branch?: string;
@@ -49,6 +49,8 @@ const repos = {
     branch: "master",
   },
 } satisfies Record<string, Repo>;
+
+export type RepoName = keyof typeof repos;
 
 export const DOCS_AGENT_PROMPT = (args: {
   repos: Repo[];
@@ -135,6 +137,8 @@ const configService = Effect.gen(function* () {
       path.join(expandHome(PROMPTS_DIRECTORY), DOCS_PROMPT_FILENAME)
     );
 
+  const getRepo = (repoName: RepoName) => Effect.succeed(repos[repoName]);
+
   const getOpenCodeConfig = (args: { agentPromptPath: string }) =>
     Effect.succeed({
       agent: {
@@ -179,6 +183,7 @@ const configService = Effect.gen(function* () {
 
   return {
     getAllRepos,
+    getRepo,
     getConfigDirectory,
     getPromptsDirectory,
     getDocsAgentPromptPath,
