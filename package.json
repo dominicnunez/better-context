@@ -1,5 +1,7 @@
 {
-  "name": "better-context",
+  "name": "@davis7/the-better-context-app",
+  "author": "Ben Davis",
+  "version": "0.0.1",
   "module": "index.ts",
   "type": "module",
   "private": true,
