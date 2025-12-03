@@ -1,7 +1,30 @@
-import { createOpencode, OpencodeClient, type Event } from "@opencode-ai/sdk";
+import {
+  createOpencode,
+  OpencodeClient,
+  type Event,
+  type Config as OpenCodeConfig,
+} from "@opencode-ai/sdk";
+import { spawn } from "bun";
 import { Deferred, Duration, Effect, Stream } from "effect";
 import { ConfigService } from "./config.ts";
 import { OcError } from "../lib/errors.ts";
+
+const spawnOpencodeTui = async (args: {
+  config: OpenCodeConfig;
+  rawConfig: { provider: string; model: string };
+}) => {
+  const proc = spawn(["opencode", `--model=${args.rawConfig.provider}/${args.rawConfig.model}`], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+    env: {
+      ...process.env,
+      OPENCODE_CONFIG_CONTENT: JSON.stringify(args.config),
+    },
+  });
+
+  await proc.exited;
+};
 
 export type { Event as OcEvent };
 
@@ -153,6 +176,20 @@ const ocService = Effect.gen(function* () {
     });
 
   return {
+    spawnTui: (args: { tech: string }) =>
+      Effect.gen(function* () {
+        const { tech } = args;
+
+        yield* config.cloneOrUpdateOneRepoLocally(tech);
+
+        const configObject = yield* config.getOpenCodeConfig({ repoName: tech });
+
+        yield* Effect.tryPromise({
+          try: () => spawnOpencodeTui({ config: configObject, rawConfig }),
+          catch: (err) =>
+            new OcError({ message: "TUI exited with error", cause: err }),
+        });
+      }),
     holdOpenInstanceInBg: () =>
       Effect.gen(function* () {
         const { client, server } = yield* getOpencodeInstance({
