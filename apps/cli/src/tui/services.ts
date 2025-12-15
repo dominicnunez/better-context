@@ -4,21 +4,13 @@ import { ConfigService } from '../services/config.ts';
 import { OcService, type OcEvent } from '../services/oc.ts';
 import type { Repo } from './types.ts';
 
-// Create a layer with all dependencies
-// We need both OcService and ConfigService available in the runtime
-// OcService.Default already has ConfigService.Default as a dependency, but we still need
-// to expose ConfigService in the layer so effects can access it directly
-// Use provideMerge to keep both custom services AND platform services (Path, FileSystem) in the output
 const ServicesLayer = Layer.mergeAll(OcService.Default, ConfigService.Default).pipe(
 	Layer.provideMerge(BunContext.layer)
 );
 
-// Create a managed runtime - this is NOT a promise, it's the runtime directly
 const runtime = ManagedRuntime.make(ServicesLayer);
 
-// Services bridge - async functions that React can call
 export const services = {
-	// Config operations
 	getRepos: (): Promise<Repo[]> =>
 		runtime.runPromise(
 			Effect.gen(function* () {
