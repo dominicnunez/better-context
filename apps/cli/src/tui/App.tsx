@@ -323,8 +323,10 @@ export function App() {
 		try {
 			await services.removeRepo(repoName);
 			setRepos((prev) => prev.filter((r) => r.name !== repoName));
-			if (selectedRepo >= repos.length - 1) {
-				setSelectedRepo(Math.max(0, repos.length - 2));
+			const newRepos = repos.filter((r) => r.name !== repoName);
+			setRepos(newRepos);
+			if (selectedRepo >= newRepos.length) {
+				setSelectedRepo(Math.max(0, newRepos.length - 1));
 			}
 			setMessages((prev) => [...prev, { role: 'system', content: `Removed repo: ${repoName}` }]);
 		} catch (error) {
