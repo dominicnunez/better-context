@@ -43,8 +43,7 @@ export function RepoSelector({ repos, selectedIndex, currentRepo, colors }: Repo
 					<box
 						key={repo}
 						style={{
-							flexDirection: 'row',
-							backgroundColor: isSelected ? colors.bgMuted : undefined
+							flexDirection: 'row'
 						}}
 					>
 						<text

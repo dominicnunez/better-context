@@ -36,13 +36,7 @@ export function AddRepoPrompt({ value, onInput, onSubmit, colors }: AddRepoPromp
 			<text fg={colors.info} content=" Add Repo" />
 			<text fg={colors.textSubtle} content=" Enter repo name or URL, then press Enter" />
 			<text content="" style={{ height: 1 }} />
-			<box
-				style={{
-					flexDirection: 'row',
-					alignItems: 'center'
-				}}
-			>
-				<text fg={colors.accent} content=" > " />
+			<box style={{}}>
 				<input
 					placeholder="repo-name or https://github.com/..."
 					placeholderColor={colors.textSubtle}
@@ -51,7 +45,7 @@ export function AddRepoPrompt({ value, onInput, onSubmit, colors }: AddRepoPromp
 					onInput={onInput}
 					onSubmit={onSubmit}
 					focused
-					style={{ flexGrow: 1 }}
+					style={{ width: '100%' }}
 				/>
 			</box>
 		</box>

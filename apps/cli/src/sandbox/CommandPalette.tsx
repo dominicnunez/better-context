@@ -61,8 +61,7 @@ export function CommandPalette({ commands, selectedIndex, colors }: CommandPalet
 					<box
 						key={cmd.name}
 						style={{
-							flexDirection: 'row',
-							backgroundColor: isSelected ? colors.bgMuted : undefined
+							flexDirection: 'row'
 						}}
 					>
 						<text

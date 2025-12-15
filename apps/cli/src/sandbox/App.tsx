@@ -48,7 +48,6 @@ export function App() {
 	// Core state
 	const [repos, setRepos] = useState(['opentui', 'effect', 'svelte', 'nextjs', 'react', 'clerk']);
 	const [selectedRepo, setSelectedRepo] = useState(0);
-	const [currentModel, setCurrentModel] = useState<ModelKey>('sonnet');
 	const [messages, setMessages] = useState<Message[]>([
 		{ role: 'user', content: 'How do I create a TUI with opentui?' },
 		{
@@ -148,23 +147,25 @@ export function App() {
 			// Command palette navigation
 			if (key.name === 'up') {
 				key.preventDefault();
-				setCommandIndex((prev) => Math.max(0, prev - 1));
+				setCommandIndex((prev) => (prev === 0 ? filteredCommands.length - 1 : prev - 1));
 			} else if (key.name === 'down') {
 				key.preventDefault();
-				setCommandIndex((prev) => Math.min(filteredCommands.length - 1, prev + 1));
+				setCommandIndex((prev) => (prev === filteredCommands.length - 1 ? 0 : prev + 1));
 			}
 		} else if (mode === 'select-repo') {
 			// Repo selector navigation
 			if (key.name === 'up') {
 				key.preventDefault();
-				setRepoSelectorIndex((prev) => Math.max(0, prev - 1));
+				setRepoSelectorIndex((prev) => (prev === 0 ? repos.length - 1 : prev - 1));
 			} else if (key.name === 'down') {
 				key.preventDefault();
-				setRepoSelectorIndex((prev) => Math.min(repos.length - 1, prev + 1));
-			} else if (key.name === 'return') {
-				key.preventDefault();
-				handleSelectRepo();
+				setRepoSelectorIndex((prev) => (prev === repos.length - 1 ? 0 : prev + 1));
 			}
+		}
+
+		if (key.name === 'return' && mode === 'select-repo') {
+			key.preventDefault();
+			handleSelectRepo();
 		}
 	});
 
@@ -339,7 +340,6 @@ export function App() {
 									: ' [/] Commands  [Enter] Send  [Ctrl+C] Quit'
 					}
 				/>
-				<text fg={colors.accent} content={`${MODELS[currentModel]} `} />
 			</box>
 		</box>
 	);
