@@ -459,9 +459,19 @@ const configCommand = Command.make('config', {}, () =>
 ).pipe(Command.withSubcommands([configModelCommand, configReposCommand]));
 
 // === Main Command ===
-const mainCommand = Command.make('btca', {}, () =>
+const versionOption = Options.boolean('version').pipe(
+	Options.withAlias('v'),
+	Options.withDescription('Print the version'),
+	Options.withDefault(false)
+);
+
+const mainCommand = Command.make('btca', { version: versionOption }, ({ version }) =>
 	Effect.sync(() => {
-		console.log(`btca v${VERSION}. run btca --help for more information.`);
+		if (version) {
+			console.log(VERSION);
+		} else {
+			console.log(`btca v${VERSION}. run btca --help for more information.`);
+		}
 	})
 ).pipe(
 	Command.withSubcommands([askCommand, serveCommand, openCommand, chatCommand, configCommand])
