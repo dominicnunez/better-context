@@ -153,16 +153,14 @@ export const AppProvider: Component<ParentProps> = (props) => {
 		setInputRef,
 		setCursorPosition,
 		cursorIsCurrentlyIn: () => {
-			let curIdx = 0;
+			const items = inputStore();
 			let minIdx = 0;
-			while (true) {
-				const curItem = inputStore()[curIdx];
-				if (!curItem) return 'text';
-				const maxIdx = minIdx + curItem.content.length;
-				if (cursorPosition() >= minIdx && cursorPosition() <= maxIdx) return curItem.type;
+			for (const item of items) {
+				const maxIdx = minIdx + item.content.length;
+				if (cursorPosition() >= minIdx && cursorPosition() <= maxIdx) return item.type;
 				minIdx = maxIdx;
-				curIdx++;
 			}
+			return 'text';
 		},
 		setInputState: setInputStore,
 

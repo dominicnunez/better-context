@@ -1,4 +1,4 @@
-import { createSignal, Show, type Component, type JSX } from 'solid-js';
+import { createSignal, type Component } from 'solid-js';
 import type { ParentProps } from 'solid-js';
 import { AppProvider } from './context/app-context';
 import { render, useKeyboard, useRenderer } from '@opentui/solid';
@@ -167,11 +167,7 @@ const App: Component = () => {
 		}
 	});
 
-	return (
-		<Show when={appState.mode() !== 'loading'} fallback={<MainUi heightPercent={heightPercent} />}>
-			<MainUi heightPercent={heightPercent} />
-		</Show>
-	);
+	return <MainUi heightPercent={heightPercent} />;
 };
 
 render(
