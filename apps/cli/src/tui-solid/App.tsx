@@ -114,10 +114,11 @@ const App: Component = () => {
 			role: 'user',
 			content: appState.inputState()
 		});
+		// Add initial assistant message that will be updated during streaming
+		appState.addMessage({ role: 'assistant', content: 'Syncing repo...' });
 		appState.setInputState([]);
 		appState.setIsLoading(true);
 		appState.setMode('loading');
-		appState.setLoadingText('');
 
 		let fullResponse = '';
 		let currentMessageId: string | null = null;
@@ -140,20 +141,19 @@ const App: Component = () => {
 					if (fullResponse.startsWith('\n\n')) {
 						fullResponse = fullResponse.slice(2);
 					}
-					appState.setLoadingText(fullResponse);
+					// Update the assistant message in the history directly
+					appState.updateLastAssistantMessage(fullResponse);
 				}
 			});
 
 			await copyToClipboard(fullResponse);
 
-			appState.addMessage({ role: 'assistant', content: fullResponse });
 			appState.addMessage({ role: 'system', content: 'Answer copied to clipboard!' });
 		} catch (error) {
 			appState.addMessage({ role: 'system', content: `Error: ${error}` });
 		} finally {
 			appState.setIsLoading(false);
 			appState.setMode('chat');
-			appState.setLoadingText('');
 		}
 	};
 

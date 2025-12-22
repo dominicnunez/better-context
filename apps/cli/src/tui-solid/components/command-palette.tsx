@@ -38,13 +38,13 @@ export const CommandPalette: Component = () => {
 			appState.setRemoveRepoName('');
 			appState.setMode('remove-repo');
 		} else if (command.mode === 'config-model') {
-			appState.setMode('config-model');
 			appState.setModelStep('provider');
 			appState.setModelValues({
 				provider: appState.selectedProvider(),
 				model: appState.selectedModel()
 			});
 			appState.setModelInput(appState.selectedProvider());
+			appState.setMode('config-model');
 		} else if (command.mode === 'chat') {
 			appState.addMessage({
 				role: 'system',

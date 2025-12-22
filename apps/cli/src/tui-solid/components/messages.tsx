@@ -1,7 +1,21 @@
-import { For, Show, type Component } from 'solid-js';
+import { For, Show, createSignal, onCleanup, type Component } from 'solid-js';
 import { useAppContext } from '../context/app-context';
 import { colors, getColor } from '../theme';
 import { RGBA, SyntaxStyle } from '@opentui/core';
+
+const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+const LoadingSpinner: Component = () => {
+	const [frameIndex, setFrameIndex] = createSignal(0);
+
+	const interval = setInterval(() => {
+		setFrameIndex((prev) => (prev + 1) % spinnerFrames.length);
+	}, 80);
+
+	onCleanup(() => clearInterval(interval));
+
+	return <text fg={colors.success}>{spinnerFrames[frameIndex()]} </text>;
+};
 
 export const Messages: Component = () => {
 	const appState = useAppContext();
@@ -70,7 +84,7 @@ export const Messages: Component = () => {
 			}}
 		>
 			<For each={appState.messageHistory()}>
-				{(m) => {
+				{(m, index) => {
 					if (m.role === 'user') {
 						return (
 							<box style={{ flexDirection: 'column', gap: 1 }}>
@@ -92,24 +106,33 @@ export const Messages: Component = () => {
 						);
 					}
 					if (m.role === 'assistant') {
+						const isLastAssistant = () => {
+							const history = appState.messageHistory();
+							for (let i = history.length - 1; i >= 0; i--) {
+								if (history[i]?.role === 'assistant') {
+									return i === index();
+								}
+							}
+							return false;
+						};
+						const isStreaming = () => appState.mode() === 'loading' && isLastAssistant();
+
 						return (
 							<box style={{ flexDirection: 'column', gap: 1 }}>
-								<text fg={colors.success}>AI </text>
-								{/* <text fg={colors.text} content={`${m.content}`} /> */}
-								<code filetype="markdown" content={m.content} syntaxStyle={syntaxStyle} />
+								<box style={{ flexDirection: 'row' }}>
+									<text fg={colors.success}>AI </text>
+									<Show when={isStreaming()}>
+										<LoadingSpinner />
+									</Show>
+								</box>
+								<Show when={!isStreaming()} fallback={<text>{m.content}</text>}>
+									<code filetype="markdown" content={m.content} syntaxStyle={syntaxStyle} />
+								</Show>
 							</box>
 						);
 					}
 				}}
 			</For>
-
-			{/* Loading/Streaming message */}
-			<Show when={appState.mode() === 'loading'}>
-				<box style={{ flexDirection: 'column', gap: 1 }}>
-					<text fg={colors.success}>AI </text>
-					<text fg={colors.text} content={appState.loadingText() || 'Cloning repo...'} />
-				</box>
-			</Show>
 		</scrollbox>
 	);
 };

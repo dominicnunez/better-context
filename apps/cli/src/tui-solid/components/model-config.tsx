@@ -1,8 +1,11 @@
-import { Show, type Component } from 'solid-js';
+import { createEffect, Show, type Component } from 'solid-js';
 import { colors } from '../theme.ts';
 import { useKeyboard } from '@opentui/solid';
 import { useAppContext, type ModelConfigStep } from '../context/app-context.tsx';
 import { services } from '../services.ts';
+
+// Track if we just opened the modal to prevent the same keypress from triggering submit
+let justOpened = false;
 
 const STEP_INFO: Record<ModelConfigStep, { title: string; hint: string; placeholder: string }> = {
 	provider: {
@@ -27,7 +30,20 @@ export const ModelConfig: Component = () => {
 
 	const info = () => STEP_INFO[appState.modelStep()];
 
+	// Reset justOpened flag when mode changes to config-model
+	createEffect(() => {
+		if (appState.mode() === 'config-model') {
+			justOpened = true;
+			// Clear the flag after a tick to allow subsequent keypresses
+			setTimeout(() => {
+				justOpened = false;
+			}, 0);
+		}
+	});
+
 	const handleSubmit = async () => {
+		// Skip if this is the same keypress that opened the modal
+		if (justOpened) return;
 		const step = appState.modelStep();
 		const value = appState.modelInput().trim();
 
@@ -59,6 +75,7 @@ export const ModelConfig: Component = () => {
 	};
 
 	useKeyboard((key) => {
+		if (appState.mode() !== 'config-model') return;
 		if (key.name === 'escape') {
 			appState.setMode('chat');
 			appState.setModelInput('');
