@@ -73,12 +73,11 @@ export const buildOpenCodeConfig = (args: { resources: ResourceInfo[] }): OpenCo
 	const repos: RepoInfo[] = args.resources.map((r) => ({
 		name: r.name,
 		relativePath: r.name,
-		specialNotes: r.specialNotes
+		specialNotes: r.specialNotes,
+		searchPath: r.searchPath
 	}));
 
 	const prompt = getMultiRepoDocsAgentPrompt({ repos });
-
-	console.log('prompt', prompt);
 
 	return {
 		provider: BTCA_PRESET_MODELS,

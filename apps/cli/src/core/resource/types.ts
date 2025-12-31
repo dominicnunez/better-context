@@ -39,4 +39,5 @@ export interface ResourceInfo {
 	name: string;
 	type: ResourceDefinition['type'];
 	specialNotes?: string;
+	searchPath?: string;
 }

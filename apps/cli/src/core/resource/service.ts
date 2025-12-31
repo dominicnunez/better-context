@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import type { ResourceDefinition, ResourceInfo } from './types.ts';
 import { isGitResource, isLocalResource } from './types.ts';
 import { ResourceError, ResourceNotFoundError, ResourceNotCachedError } from './errors.ts';
-import { cloneWithDegit, ensureGitResource, isGitResourceCached } from './strategies/git.ts';
+import { ensureGitResource, isGitResourceCached } from './strategies/git.ts';
 import { ensureLocalResource, isLocalResourceValid } from './strategies/local.ts';
 import { directoryExists, removeDirectory } from '../../lib/utils/files.ts';
 
@@ -54,7 +54,7 @@ const createResourceService = (config: ResourceServiceConfig) =>
 			ensure: (name: string, options?: { refresh?: boolean; quiet?: boolean }) =>
 				Effect.gen(function* () {
 					const resource = yield* getResourceDefinition(name);
-					const { refresh = false, quiet = false } = options ?? {};
+					const { quiet = false } = options ?? {};
 
 					if (isGitResource(resource)) {
 						return yield* ensureGitResource({

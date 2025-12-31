@@ -52,27 +52,31 @@ export type StoredConfig = typeof StoredConfigSchema.Type;
 // Default resources (git repos)
 export const DEFAULT_RESOURCES: (typeof ResourceDefinitionSchema.Type)[] = [
 	{
-		type: 'git',
 		name: 'svelte',
+		specialNotes:
+			'This is the svelte docs website repo, not the actual svelte repo. Focus on the content directory, it has all the markdown files for the docs.',
+		type: 'git',
 		url: 'https://github.com/sveltejs/svelte.dev',
 		branch: 'main',
-		searchPath: 'apps/svelte.dev',
-		specialNotes:
-			'This is the svelte docs website repo, not the actual svelte repo. Use the docs to answer questions about svelte.'
+		searchPath: 'apps/svelte.dev'
 	},
 	{
-		type: 'git',
 		name: 'tailwindcss',
-		url: 'https://github.com/tailwindlabs/tailwindcss.com',
-		branch: 'main',
 		specialNotes:
-			'This is the tailwindcss docs website repo, not the actual tailwindcss repo. Use the docs to answer questions about tailwindcss.'
+			'This is the tailwindcss docs website repo, not the actual tailwindcss repo. Use the docs to answer questions about tailwindcss.',
+		type: 'git',
+		url: 'https://github.com/tailwindlabs/tailwindcss.com',
+		searchPath: 'src/docs',
+		branch: 'main'
 	},
 	{
 		type: 'git',
 		name: 'nextjs',
 		url: 'https://github.com/vercel/next.js',
-		branch: 'canary'
+		branch: 'canary',
+		searchPath: 'docs',
+		specialNotes:
+			'These are the docs for the next.js framework, not the actual next.js repo. Use the docs to answer questions about next.js.'
 	}
 ];
 

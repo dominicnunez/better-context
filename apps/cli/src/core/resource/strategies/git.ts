@@ -4,34 +4,66 @@ import type { GitResource } from '../types.ts';
 import { ResourceError } from '../errors.ts';
 import { directoryExists } from '../../../lib/utils/files.ts';
 
-/** clone a git repo with degit */
-export const cloneWithDegit = (args: {
+/** Run a git command, fails with ResourceError if non-zero exit */
+const runGit = (args: string[], options: { cwd?: string; quiet?: boolean }) =>
+	Effect.tryPromise({
+		try: async () => {
+			const stdio = options.quiet ? 'ignore' : 'inherit';
+			const proc = Bun.spawn(['git', ...args], {
+				cwd: options.cwd,
+				stdout: stdio,
+				stderr: stdio
+			});
+			const exitCode = await proc.exited;
+			if (exitCode !== 0) {
+				throw new Error(`git ${args[0]} failed with exit code ${exitCode}`);
+			}
+		},
+		catch: (error) => new ResourceError({ message: `git ${args[0]} failed`, cause: error })
+	});
+
+/** Write sparse checkout config */
+const writeSparseCheckout = (repoDir: string, searchPath: string) =>
+	Effect.tryPromise({
+		try: () => Bun.write(`${repoDir}/.git/info/sparse-checkout`, `${searchPath}/*\n`),
+		catch: (error) =>
+			new ResourceError({ message: 'Failed to write sparse-checkout', cause: error })
+	});
+
+/** Clone a git repo with sparse checkout */
+const cloneRepo = (args: {
 	repoDir: string;
 	url: string;
 	branch: string;
 	searchPath?: string;
 	quiet?: boolean;
 }) =>
-	Effect.tryPromise({
-		try: async () => {
-			const { repoDir, url, branch, searchPath, quiet } = args;
-			const source = searchPath ? `${url}/${searchPath}#${branch}` : `${url}#${branch}`;
-			const proc = Bun.spawn(['bunx', 'degit', source, repoDir, '--force'], {
-				stdout: quiet ? 'ignore' : 'inherit',
-				stderr: quiet ? 'ignore' : 'inherit'
-			});
-			const exitCode = await proc.exited;
-			if (exitCode !== 0) {
-				throw new Error(`Failed to clone repo with degit: ${exitCode}`);
-			}
-		},
-		catch: (error) =>
-			new ResourceError({ message: 'Failed to clone repo with degit', cause: error })
+	Effect.gen(function* () {
+		const { repoDir, url, branch, searchPath, quiet } = args;
+
+		yield* runGit(['init', repoDir], { quiet });
+		yield* runGit(['remote', 'add', 'origin', url], { cwd: repoDir, quiet });
+
+		if (searchPath) {
+			yield* runGit(['config', 'core.sparseCheckout', 'true'], { cwd: repoDir, quiet });
+			yield* writeSparseCheckout(repoDir, searchPath);
+		}
+
+		yield* runGit(['fetch', '--depth', '1', 'origin', branch], { cwd: repoDir, quiet });
+		yield* runGit(['checkout', branch], { cwd: repoDir, quiet });
+	});
+
+/** Pull latest changes for a git repo */
+const pullRepo = (args: { repoDir: string; branch: string; quiet?: boolean }) =>
+	Effect.gen(function* () {
+		const { repoDir, branch, quiet } = args;
+		yield* runGit(['fetch', '--depth', '1', 'origin', branch], { cwd: repoDir, quiet });
+		yield* runGit(['reset', '--hard', `origin/${branch}`], { cwd: repoDir, quiet });
 	});
 
 /**
- * Ensure a git resource is cached locally using degit.
- * Always does a fresh clone (degit uses --force).
+ * Ensure a git resource is cached locally.
+ * Clones if not present, pulls if already present.
  */
 export const ensureGitResource = (args: {
 	resource: GitResource;
@@ -42,18 +74,29 @@ export const ensureGitResource = (args: {
 		const { resource, resourcesDir, quiet = false } = args;
 		const repoDir = `${resourcesDir}/${resource.name}`;
 
-		yield* cloneWithDegit({
-			repoDir,
-			url: resource.url,
-			branch: resource.branch,
-			searchPath: resource.searchPath,
-			quiet
-		});
+		const exists = yield* directoryExists(repoDir).pipe(
+			Effect.mapError((e) => new ResourceError({ message: e.message, cause: e }))
+		);
+
+		if (exists) {
+			if (!quiet) yield* Effect.log(`Updating ${resource.name}...`);
+			yield* pullRepo({ repoDir, branch: resource.branch, quiet });
+		} else {
+			if (!quiet) yield* Effect.log(`Cloning ${resource.name}...`);
+			yield* cloneRepo({
+				repoDir,
+				url: resource.url,
+				branch: resource.branch,
+				searchPath: resource.searchPath,
+				quiet
+			});
+		}
 
 		return {
 			name: resource.name,
 			type: 'git' as const,
-			specialNotes: resource.specialNotes
+			specialNotes: resource.specialNotes,
+			searchPath: resource.searchPath
 		};
 	});
 

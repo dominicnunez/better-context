@@ -1,6 +1,7 @@
 export interface RepoInfo {
 	name: string;
 	relativePath: string; // e.g., "svelte" (relative to workspace cwd)
+	searchPath?: string;
 	specialNotes?: string;
 }
 
@@ -10,7 +11,7 @@ export interface RepoInfo {
 export const getMultiRepoDocsAgentPrompt = (args: { repos: RepoInfo[] }) => {
 	const repoList = args.repos
 		.map((repo) => {
-			let section = `## ${repo.name}\nDirectory: ./${repo.relativePath}`;
+			let section = `## ${repo.name}\nDirectory: ./${repo.relativePath}${repo.searchPath ? `/${repo.searchPath}` : ''}`;
 			if (repo.specialNotes) {
 				section += `\nNotes: ${repo.specialNotes}`;
 			}
