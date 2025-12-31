@@ -1,289 +1,21 @@
 import { Command, Options } from '@effect/cli';
-import {
-	FileSystem,
-	HttpRouter,
-	HttpServer,
-	HttpServerRequest,
-	HttpServerResponse
-} from '@effect/platform';
-import { BunHttpServer } from '@effect/platform-bun';
-import { Effect, Layer, Schema, Stream } from 'effect';
+import { BunContext } from '@effect/platform-bun';
+import { Effect, Stream } from 'effect';
 import * as readline from 'readline';
-import { OcService, type OcEvent } from './oc.ts';
-import { ConfigService } from './config.ts';
+import {
+	initializeCoreServices,
+	getResourceInfos,
+	extractMetadataFromEvents,
+	streamToChunks
+} from '../core/index.ts';
+import type { ResourceDefinition, GitResource, LocalResource } from '../core/resource/types.ts';
+import { isGitResource } from '../core/resource/types.ts';
 
 declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
 
-const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default);
+// === Helper Functions ===
 
-// === Ask Subcommand ===
-const questionOption = Options.text('question').pipe(Options.withAlias('q'));
-const techOption = Options.text('tech').pipe(Options.withAlias('t'));
-const noSyncOption = Options.boolean('no-sync').pipe(Options.withAlias('n'));
-
-const askCommand = Command.make(
-	'ask',
-	{ question: questionOption, tech: techOption, noSync: noSyncOption },
-	({ question, tech, noSync }) =>
-		Effect.gen(function* () {
-			const oc = yield* OcService;
-			const eventStream = yield* oc.askQuestion({ tech, question, suppressLogs: false, noSync });
-
-			let currentMessageId: string | null = null;
-
-			yield* eventStream.pipe(
-				Stream.runForEach((event) =>
-					Effect.sync(() => {
-						switch (event.type) {
-							case 'message.part.updated':
-								if (event.properties.part.type === 'text') {
-									if (currentMessageId === event.properties.part.messageID) {
-										process.stdout.write(event.properties.delta ?? '');
-									} else {
-										currentMessageId = event.properties.part.messageID;
-										process.stdout.write('\n\n' + event.properties.part.text);
-									}
-								}
-								break;
-							default:
-								break;
-						}
-					})
-				)
-			);
-
-			console.log('\n');
-		}).pipe(
-			Effect.catchTags({
-				InvalidProviderError: (e) =>
-					Effect.sync(() => {
-						console.error(`Error: Unknown provider "${e.providerId}"`);
-						console.error(`Available providers: ${e.availableProviders.join(', ')}`);
-						process.exit(1);
-					}),
-				InvalidModelError: (e) =>
-					Effect.sync(() => {
-						console.error(`Error: Unknown model "${e.modelId}" for provider "${e.providerId}"`);
-						console.error(`Available models: ${e.availableModels.join(', ')}`);
-						process.exit(1);
-					}),
-				ProviderNotConnectedError: (e) =>
-					Effect.sync(() => {
-						console.error(`Error: Provider "${e.providerId}" is not connected`);
-						console.error(`Connected providers: ${e.connectedProviders.join(', ')}`);
-						console.error(`Run "opencode auth" to configure provider credentials.`);
-						process.exit(1);
-					})
-			}),
-			Effect.provide(programLayer)
-		)
-);
-
-// === Chat Subcommand ===
-const chatTechOption = Options.text('tech').pipe(Options.withAlias('t'));
-
-const chatCommand = Command.make('chat', { tech: chatTechOption }, ({ tech }) =>
-	Effect.gen(function* () {
-		const oc = yield* OcService;
-		yield* oc.spawnTui({ tech });
-	}).pipe(Effect.provide(programLayer))
-);
-
-// === Serve Subcommand ===
-const QuestionRequest = Schema.Struct({
-	tech: Schema.String,
-	question: Schema.String
-});
-
-const portOption = Options.integer('port').pipe(Options.withAlias('p'), Options.withDefault(8080));
-
-const serveCommand = Command.make('serve', { port: portOption }, ({ port }) =>
-	Effect.gen(function* () {
-		const router = HttpRouter.empty.pipe(
-			HttpRouter.post(
-				'/question',
-				Effect.gen(function* () {
-					const body = yield* HttpServerRequest.schemaBodyJson(QuestionRequest);
-					const oc = yield* OcService;
-
-					const eventStream = yield* oc.askQuestion({
-						tech: body.tech,
-						question: body.question,
-						suppressLogs: false
-					});
-
-					const chunks: string[] = [];
-					let currentMessageId: string | null = null;
-					yield* eventStream.pipe(
-						Stream.runForEach((event) =>
-							Effect.sync(() => {
-								switch (event.type) {
-									case 'message.part.updated':
-										if (event.properties.part.type === 'text') {
-											if (currentMessageId === event.properties.part.messageID) {
-												chunks[chunks.length - 1] += event.properties.delta ?? '';
-											} else {
-												currentMessageId = event.properties.part.messageID;
-												chunks.push(event.properties.part.text ?? '');
-											}
-										}
-										break;
-									default:
-										break;
-								}
-							})
-						)
-					);
-
-					return yield* HttpServerResponse.json({ answer: chunks.join('') });
-				})
-			)
-		);
-
-		const ServerLive = BunHttpServer.layer({ port });
-
-		const HttpLive = router.pipe(
-			HttpServer.serve(),
-			HttpServer.withLogAddress,
-			Layer.provide(ServerLive)
-		);
-
-		return yield* Layer.launch(HttpLive);
-	}).pipe(Effect.scoped, Effect.provide(programLayer))
-);
-
-// === Config Subcommands ===
-
-// config model - view or set model/provider
-const providerOption = Options.text('provider').pipe(Options.withAlias('p'), Options.optional);
-const modelOption = Options.text('model').pipe(Options.withAlias('m'), Options.optional);
-
-const configModelCommand = Command.make(
-	'model',
-	{ provider: providerOption, model: modelOption },
-	({ provider, model }) =>
-		Effect.gen(function* () {
-			const config = yield* ConfigService;
-
-			// If both options provided, update the config
-			if (provider._tag === 'Some' && model._tag === 'Some') {
-				const result = yield* config.updateModel({
-					provider: provider.value,
-					model: model.value
-				});
-				console.log(`Updated model configuration:`);
-				console.log(`  Provider: ${result.provider}`);
-				console.log(`  Model: ${result.model}`);
-			} else if (provider._tag === 'Some' || model._tag === 'Some') {
-				// If only one is provided, show an error
-				console.error('Error: Both --provider and --model must be specified together');
-				process.exit(1);
-			} else {
-				// No options, show current values
-				const current = yield* config.getModel();
-				console.log(`Current model configuration:`);
-				console.log(`  Provider: ${current.provider}`);
-				console.log(`  Model: ${current.model}`);
-			}
-		}).pipe(Effect.provide(programLayer))
-);
-
-// config repos list - list all repos
-const configReposListCommand = Command.make('list', {}, () =>
-	Effect.gen(function* () {
-		const config = yield* ConfigService;
-		const repos = yield* config.getRepos();
-
-		if (repos.length === 0) {
-			console.log('No repos configured.');
-			return;
-		}
-
-		console.log('Configured repos:\n');
-		for (const repo of repos) {
-			console.log(`  ${repo.name}`);
-			console.log(`    URL: ${repo.url}`);
-			console.log(`    Branch: ${repo.branch}`);
-			if (repo.specialNotes) {
-				console.log(`    Notes: ${repo.specialNotes}`);
-			}
-			console.log();
-		}
-	}).pipe(Effect.provide(programLayer))
-);
-
-// config repos add - add a new repo
-const repoNameOption = Options.text('name').pipe(Options.withAlias('n'));
-const repoUrlOption = Options.text('url').pipe(Options.withAlias('u'));
-const repoBranchOption = Options.text('branch').pipe(
-	Options.withAlias('b'),
-	Options.withDefault('main')
-);
-const repoNotesOption = Options.text('notes').pipe(Options.optional);
-
-const configReposAddCommand = Command.make(
-	'add',
-	{
-		name: repoNameOption.pipe(Options.optional),
-		url: repoUrlOption.pipe(Options.optional),
-		branch: repoBranchOption,
-		notes: repoNotesOption
-	},
-	({ name, url, branch, notes }) =>
-		Effect.gen(function* () {
-			const config = yield* ConfigService;
-
-			let repoName: string;
-			if (name._tag === 'Some') {
-				repoName = name.value;
-			} else {
-				repoName = yield* askText('Enter repo name: ');
-			}
-
-			if (!repoName) {
-				console.log('No repo name provided.');
-				return;
-			}
-
-			let repoUrl: string;
-			if (url._tag === 'Some') {
-				repoUrl = url.value;
-			} else {
-				repoUrl = yield* askText('Enter repo URL: ');
-			}
-
-			if (!repoUrl) {
-				console.log('No repo URL provided.');
-				return;
-			}
-
-			const repo = {
-				name: repoName,
-				url: repoUrl,
-				branch,
-				...(notes._tag === 'Some' ? { specialNotes: notes.value } : {})
-			};
-
-			yield* config.addRepo(repo);
-			console.log(`Added repo "${repoName}":`);
-			console.log(`  URL: ${repoUrl}`);
-			console.log(`  Branch: ${branch}`);
-			if (notes._tag === 'Some') {
-				console.log(`  Notes: ${notes.value}`);
-			}
-		}).pipe(
-			Effect.catchTag('ConfigError', (e) =>
-				Effect.sync(() => {
-					console.error(`Error: ${e.message}`);
-					process.exit(1);
-				})
-			),
-			Effect.provide(programLayer)
-		)
-);
-
-// config repos clear - clear all downloaded repos
 const askConfirmation = (question: string): Effect.Effect<boolean> =>
 	Effect.async<boolean>((resume) => {
 		const rl = readline.createInterface({
@@ -311,44 +43,428 @@ const askText = (question: string): Effect.Effect<string> =>
 		});
 	});
 
-const configReposRemoveCommand = Command.make(
-	'remove',
-	{ name: repoNameOption.pipe(Options.optional) },
-	({ name }) =>
+/**
+ * Interactive multi-select for resources
+ */
+const selectResources = (availableResources: string[]): Effect.Effect<string[]> =>
+	Effect.gen(function* () {
+		console.log('Available resources:');
+		availableResources.forEach((resource, idx) => {
+			console.log(`  ${idx + 1}. ${resource}`);
+		});
+		console.log('');
+
+		const input = yield* askText(
+			'Enter resource numbers (comma-separated) or names (space-separated): '
+		);
+
+		if (!input) {
+			return [];
+		}
+
+		// Try to parse as numbers first
+		const parts = input.split(/[,\s]+/).filter(Boolean);
+		const selected: string[] = [];
+
+		for (const part of parts) {
+			const num = parseInt(part, 10);
+			if (!isNaN(num) && num >= 1 && num <= availableResources.length) {
+				selected.push(availableResources[num - 1]!);
+			} else if (availableResources.includes(part.toLowerCase())) {
+				selected.push(part.toLowerCase());
+			} else if (availableResources.includes(part)) {
+				selected.push(part);
+			}
+		}
+
+		return [...new Set(selected)];
+	});
+
+/**
+ * Parse @mentions from query string
+ */
+const parseQuery = (query: string): { query: string; resources: string[] } => {
+	const mentionRegex = /@(\w+)/g;
+	const resources: string[] = [];
+	let match;
+
+	while ((match = mentionRegex.exec(query)) !== null) {
+		resources.push(match[1]!);
+	}
+
+	// Remove @mentions from query
+	const cleanQuery = query.replace(mentionRegex, '').trim();
+
+	return { query: cleanQuery, resources };
+};
+
+/**
+ * Merge CLI -r flags with @mentions, deduplicating
+ */
+const mergeResources = (cliResources: string[], mentionedResources: string[]): string[] => {
+	return [...new Set([...cliResources, ...mentionedResources])];
+};
+
+// === Ask Subcommand ===
+const questionOption = Options.text('question').pipe(Options.withAlias('q'));
+const resourceOption = Options.text('resource').pipe(Options.withAlias('r'), Options.repeated);
+const techOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+const askCommand = Command.make(
+	'ask',
+	{ question: questionOption, resource: resourceOption, tech: techOption },
+	({ question, resource, tech }) =>
 		Effect.gen(function* () {
-			const config = yield* ConfigService;
+			const services = yield* initializeCoreServices;
 
-			let repoName: string;
-			if (name._tag === 'Some') {
-				repoName = name.value;
-			} else {
-				repoName = yield* askText('Enter repo name to remove: ');
+			// Parse @mentions from question
+			const parsed = parseQuery(question);
+
+			// Merge CLI -r flags with @mentions
+			let resourceNames = mergeResources([...resource], parsed.resources);
+
+			if (tech._tag === 'Some') {
+				resourceNames = mergeResources(resourceNames, [tech.value]);
 			}
 
-			if (!repoName) {
-				console.log('No repo name provided.');
-				return;
+			// If no resources specified, prompt user
+			if (resourceNames.length === 0) {
+				const allResources = yield* services.config.getResources();
+				const names = allResources.map((r) => r.name);
+
+				if (names.length === 0) {
+					console.error('No resources configured. Run "btca config resources add" first.');
+					process.exit(1);
+				}
+
+				resourceNames = yield* selectResources(names);
+
+				if (resourceNames.length === 0) {
+					console.error('No resources selected.');
+					process.exit(1);
+				}
 			}
 
-			// Check if repo exists
-			const repos = yield* config.getRepos();
-			const exists = repos.find((r) => r.name === repoName);
-			if (!exists) {
-				console.error(`Error: Repo "${repoName}" not found.`);
+			// Validate resources exist
+			const allResources = yield* services.config.getResources();
+			const availableNames = new Set(allResources.map((r) => r.name));
+			for (const name of resourceNames) {
+				if (!availableNames.has(name)) {
+					console.error(`Error: Unknown resource "${name}"`);
+					console.error(`Available resources: ${[...availableNames].join(', ')}`);
+					process.exit(1);
+				}
+			}
+
+			console.log(`Searching resources: ${resourceNames.join(', ')}\n`);
+
+			// Ensure resources and collection
+			const resourceInfos = yield* getResourceInfos(services.resources, resourceNames);
+			const collection = yield* services.collections.ensure(resourceNames, { quiet: false });
+
+			// Get model config for saving
+			const modelConfig = yield* services.config.getModel();
+
+			// Ask the question
+			const eventStream = yield* services.agent.ask({
+				collection,
+				resources: resourceInfos,
+				question: parsed.query
+			});
+
+			let fullAnswer = '';
+			let fullReasoning = '';
+			const startTime = Date.now();
+			const { stream: chunkStream, getChunks, getEvents } = streamToChunks(eventStream);
+
+			yield* chunkStream.pipe(
+				Stream.runForEach((update) =>
+					Effect.sync(() => {
+						if (update.type === 'add') {
+							const chunk = update.chunk;
+							if (chunk.type === 'text') {
+								if (fullReasoning) {
+									process.stdout.write('\n</thinking>\n\n');
+									fullReasoning = '';
+								}
+								process.stdout.write(chunk.text);
+								fullAnswer = chunk.text;
+							} else if (chunk.type === 'reasoning') {
+								process.stdout.write(`\n<thinking>\n${chunk.text}`);
+								fullReasoning = chunk.text;
+							} else if (chunk.type === 'tool') {
+								console.log(`\n[Tool: ${chunk.toolName}]`);
+							} else if (chunk.type === 'file') {
+								console.log(`\n[Reading: ${chunk.filePath}]`);
+							}
+						} else if (update.type === 'update') {
+							const chunks = getChunks();
+							const chunk = chunks.find((c) => c.id === update.id);
+							if (chunk?.type === 'text') {
+								process.stdout.write(chunk.text.slice(fullAnswer.length));
+								fullAnswer = chunk.text;
+							} else if (chunk?.type === 'reasoning') {
+								process.stdout.write(chunk.text.slice(fullReasoning.length));
+								fullReasoning = chunk.text;
+							}
+						}
+					})
+				)
+			);
+
+			console.log('\n');
+			const allEvents = getEvents();
+
+			// Save to thread database
+			const metadata = extractMetadataFromEvents(allEvents);
+			metadata.durationMs = Date.now() - startTime;
+
+			yield* services.threads.createWithQuestion({
+				resources: resourceNames,
+				provider: modelConfig.provider,
+				model: modelConfig.model,
+				prompt: parsed.query,
+				answer: fullAnswer,
+				metadata
+			});
+		}).pipe(
+			Effect.catchTags({
+				InvalidProviderError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Unknown provider "${e.providerId}"`);
+						console.error(`Available providers: ${e.availableProviders.join(', ')}`);
+						process.exit(1);
+					}),
+				InvalidModelError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Unknown model "${e.modelId}" for provider "${e.providerId}"`);
+						console.error(`Available models: ${e.availableModels.join(', ')}`);
+						process.exit(1);
+					}),
+				ProviderNotConnectedError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Provider "${e.providerId}" is not connected`);
+						console.error(`Connected providers: ${e.connectedProviders.join(', ')}`);
+						console.error(`Run "opencode auth" to configure provider credentials.`);
+						process.exit(1);
+					}),
+				ConfigError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: ${e.message}`);
+						process.exit(1);
+					})
+			}),
+			Effect.provide(BunContext.layer)
+		)
+);
+
+// === Chat Subcommand ===
+const chatResourceOption = Options.text('resource').pipe(Options.withAlias('r'), Options.repeated);
+
+const chatCommand = Command.make('chat', { resource: chatResourceOption }, ({ resource }) =>
+	Effect.gen(function* () {
+		const services = yield* initializeCoreServices;
+
+		let resourceNames = [...resource];
+
+		// If no resources specified, prompt user
+		if (resourceNames.length === 0) {
+			const allResources = yield* services.config.getResources();
+			const names = allResources.map((r) => r.name);
+
+			if (names.length === 0) {
+				console.error('No resources configured. Run "btca config resources add" first.');
 				process.exit(1);
 			}
 
-			const confirmed = yield* askConfirmation(
-				`Are you sure you want to remove repo "${repoName}" from config? (y/N): `
-			);
+			resourceNames = yield* selectResources(names);
 
-			if (!confirmed) {
-				console.log('Aborted.');
+			if (resourceNames.length === 0) {
+				console.error('No resources selected.');
+				process.exit(1);
+			}
+		}
+
+		// Ensure resources and collection
+		const resourceInfos = yield* getResourceInfos(services.resources, resourceNames);
+		const collection = yield* services.collections.ensure(resourceNames, { quiet: false });
+
+		yield* services.agent.spawnTui({ collection, resources: resourceInfos });
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(BunContext.layer)
+	)
+);
+
+// === Config Subcommands ===
+
+// config model - view or set model/provider
+const providerOption = Options.text('provider').pipe(Options.withAlias('p'), Options.optional);
+const modelOption = Options.text('model').pipe(Options.withAlias('m'), Options.optional);
+
+const configModelCommand = Command.make(
+	'model',
+	{ provider: providerOption, model: modelOption },
+	({ provider, model }) =>
+		Effect.gen(function* () {
+			const services = yield* initializeCoreServices;
+
+			// If both options provided, update the config
+			if (provider._tag === 'Some' && model._tag === 'Some') {
+				const result = yield* services.config.updateModel({
+					provider: provider.value,
+					model: model.value
+				});
+				console.log(`Updated model configuration:`);
+				console.log(`  Provider: ${result.provider}`);
+				console.log(`  Model: ${result.model}`);
+			} else if (provider._tag === 'Some' || model._tag === 'Some') {
+				// If only one is provided, show an error
+				console.error('Error: Both --provider and --model must be specified together');
+				process.exit(1);
+			} else {
+				// No options, show current values
+				const current = yield* services.config.getModel();
+				console.log(`Current model configuration:`);
+				console.log(`  Provider: ${current.provider}`);
+				console.log(`  Model: ${current.model}`);
+			}
+		}).pipe(Effect.provide(BunContext.layer))
+);
+
+// config resources list - list all resources
+const configResourcesListCommand = Command.make('list', {}, () =>
+	Effect.gen(function* () {
+		const services = yield* initializeCoreServices;
+		const resources = yield* services.config.getResources();
+
+		if (resources.length === 0) {
+			console.log('No resources configured.');
+			return;
+		}
+
+		console.log('Configured resources:\n');
+		for (const resource of resources) {
+			console.log(`  ${resource.name} (${resource.type})`);
+			if (isGitResource(resource)) {
+				console.log(`    URL: ${resource.url}`);
+				console.log(`    Branch: ${resource.branch}`);
+				if (resource.searchPath) {
+					console.log(`    Search Path: ${resource.searchPath}`);
+				}
+			} else {
+				console.log(`    Path: ${resource.path}`);
+			}
+			if (resource.specialNotes) {
+				console.log(`    Notes: ${resource.specialNotes}`);
+			}
+			console.log();
+		}
+	}).pipe(Effect.provide(BunContext.layer))
+);
+
+// config resources add - add a new resource (git or local)
+const resourceNameOption = Options.text('name').pipe(Options.withAlias('n'));
+const resourceTypeOption = Options.choice('type', ['git', 'local']).pipe(
+	Options.withAlias('t'),
+	Options.withDefault('git' as const)
+);
+const resourceUrlOption = Options.text('url').pipe(Options.withAlias('u'), Options.optional);
+const resourceBranchOption = Options.text('branch').pipe(
+	Options.withAlias('b'),
+	Options.withDefault('main')
+);
+const resourcePathOption = Options.text('path').pipe(Options.optional);
+const resourceNotesOption = Options.text('notes').pipe(Options.optional);
+const resourceSearchPathOption = Options.text('search-path').pipe(Options.optional);
+
+const configResourcesAddCommand = Command.make(
+	'add',
+	{
+		name: resourceNameOption.pipe(Options.optional),
+		type: resourceTypeOption,
+		url: resourceUrlOption,
+		branch: resourceBranchOption,
+		path: resourcePathOption,
+		notes: resourceNotesOption,
+		searchPath: resourceSearchPathOption
+	},
+	({ name, type, url, branch, path, notes, searchPath }) =>
+		Effect.gen(function* () {
+			const services = yield* initializeCoreServices;
+
+			let resourceName: string;
+			if (name._tag === 'Some') {
+				resourceName = name.value;
+			} else {
+				resourceName = yield* askText('Enter resource name: ');
+			}
+
+			if (!resourceName) {
+				console.log('No resource name provided.');
 				return;
 			}
 
-			yield* config.removeRepo(repoName);
-			console.log(`Removed repo "${repoName}".`);
+			let resource: ResourceDefinition;
+
+			if (type === 'git') {
+				let resourceUrl: string;
+				if (url._tag === 'Some') {
+					resourceUrl = url.value;
+				} else {
+					resourceUrl = yield* askText('Enter git URL: ');
+				}
+
+				if (!resourceUrl) {
+					console.log('No URL provided.');
+					return;
+				}
+
+				const gitResource: GitResource = {
+					type: 'git',
+					name: resourceName,
+					url: resourceUrl,
+					branch,
+					...(notes._tag === 'Some' ? { specialNotes: notes.value } : {}),
+					...(searchPath._tag === 'Some' ? { searchPath: searchPath.value } : {})
+				};
+				resource = gitResource;
+			} else {
+				let resourcePath: string;
+				if (path._tag === 'Some') {
+					resourcePath = path.value;
+				} else {
+					resourcePath = yield* askText('Enter local path: ');
+				}
+
+				if (!resourcePath) {
+					console.log('No path provided.');
+					return;
+				}
+
+				const localResource: LocalResource = {
+					type: 'local',
+					name: resourceName,
+					path: resourcePath,
+					...(notes._tag === 'Some' ? { specialNotes: notes.value } : {})
+				};
+				resource = localResource;
+			}
+
+			yield* services.config.addResource(resource);
+			console.log(`Added ${type} resource "${resourceName}"`);
+
+			if (isGitResource(resource)) {
+				console.log(`  URL: ${resource.url}`);
+				console.log(`  Branch: ${resource.branch}`);
+			} else {
+				console.log(`  Path: ${resource.path}`);
+			}
 		}).pipe(
 			Effect.catchTag('ConfigError', (e) =>
 				Effect.sync(() => {
@@ -356,49 +472,227 @@ const configReposRemoveCommand = Command.make(
 					process.exit(1);
 				})
 			),
-			Effect.provide(programLayer)
+			Effect.provide(BunContext.layer)
 		)
 );
 
-const configReposClearCommand = Command.make('clear', {}, () =>
-	Effect.gen(function* () {
-		const config = yield* ConfigService;
-		const fs = yield* FileSystem.FileSystem;
+const configResourcesRemoveCommand = Command.make(
+	'remove',
+	{ name: resourceNameOption.pipe(Options.optional) },
+	({ name }) =>
+		Effect.gen(function* () {
+			const services = yield* initializeCoreServices;
 
-		const reposDir = yield* config.getReposDirectory();
-
-		// Check if repos directory exists
-		const exists = yield* fs.exists(reposDir);
-		if (!exists) {
-			console.log('Repos directory does not exist. Nothing to clear.');
-			return;
-		}
-
-		// List all directories in the repos directory
-		const entries = yield* fs.readDirectory(reposDir);
-		const repoPaths: string[] = [];
-
-		for (const entry of entries) {
-			const fullPath = `${reposDir}/${entry}`;
-			const stat = yield* fs.stat(fullPath);
-			if (stat.type === 'Directory') {
-				repoPaths.push(fullPath);
+			let resourceName: string;
+			if (name._tag === 'Some') {
+				resourceName = name.value;
+			} else {
+				resourceName = yield* askText('Enter resource name to remove: ');
 			}
-		}
 
-		if (repoPaths.length === 0) {
-			console.log('No repos found in the repos directory. Nothing to clear.');
+			if (!resourceName) {
+				console.log('No resource name provided.');
+				return;
+			}
+
+			// Check if resource exists
+			const resources = yield* services.config.getResources();
+			const exists = resources.find((r) => r.name === resourceName);
+			if (!exists) {
+				console.error(`Error: Resource "${resourceName}" not found.`);
+				process.exit(1);
+			}
+
+			const confirmed = yield* askConfirmation(
+				`Are you sure you want to remove resource "${resourceName}" from config? (y/N): `
+			);
+
+			if (!confirmed) {
+				console.log('Aborted.');
+				return;
+			}
+
+			yield* services.config.removeResource(resourceName);
+			console.log(`Removed resource "${resourceName}".`);
+		}).pipe(
+			Effect.catchTag('ConfigError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(BunContext.layer)
+		)
+);
+
+// config resources - parent command for resource subcommands
+const configResourcesCommand = Command.make('resources', {}, () =>
+	Effect.sync(() => {
+		console.log('Usage: btca config resources <command>');
+		console.log('');
+		console.log('Commands:');
+		console.log('  list    List all configured resources');
+		console.log('  add     Add a new resource');
+		console.log('  remove  Remove a configured resource');
+	})
+).pipe(
+	Command.withSubcommands([
+		configResourcesListCommand,
+		configResourcesAddCommand,
+		configResourcesRemoveCommand
+	])
+);
+
+// === Collections Subcommands ===
+
+const configCollectionsListCommand = Command.make('list', {}, () =>
+	Effect.gen(function* () {
+		const services = yield* initializeCoreServices;
+		const collections = yield* services.collections.list();
+
+		if (collections.length === 0) {
+			console.log('No collections found.');
 			return;
 		}
 
-		console.log('The following repos will be deleted:\n');
-		for (const repoPath of repoPaths) {
-			console.log(`  ${repoPath}`);
+		console.log('Collections:\n');
+		for (const collection of collections) {
+			console.log(`  ${collection}`);
 		}
-		console.log();
+	}).pipe(
+		Effect.catchTag('CollectionError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(BunContext.layer)
+	)
+);
+
+const collectionKeyOption = Options.text('key').pipe(Options.withAlias('k'), Options.optional);
+
+const configCollectionsClearCommand = Command.make(
+	'clear',
+	{ key: collectionKeyOption },
+	({ key }) =>
+		Effect.gen(function* () {
+			const services = yield* initializeCoreServices;
+
+			if (key._tag === 'Some') {
+				yield* services.collections.remove(key.value);
+				console.log(`Cleared collection: ${key.value}`);
+			} else {
+				const collections = yield* services.collections.list();
+
+				if (collections.length === 0) {
+					console.log('No collections to clear.');
+					return;
+				}
+
+				console.log('The following collections will be deleted:\n');
+				for (const collection of collections) {
+					console.log(`  ${collection}`);
+				}
+				console.log();
+
+				const confirmed = yield* askConfirmation(
+					'Are you sure you want to delete all collections? (y/N): '
+				);
+
+				if (!confirmed) {
+					console.log('Aborted.');
+					return;
+				}
+
+				yield* services.collections.clear();
+				console.log('All collections cleared.');
+			}
+		}).pipe(
+			Effect.catchTag('CollectionError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(BunContext.layer)
+		)
+);
+
+const configCollectionsCommand = Command.make('collections', {}, () =>
+	Effect.sync(() => {
+		console.log('Usage: btca config collections <command>');
+		console.log('');
+		console.log('Commands:');
+		console.log('  list    List all collections');
+		console.log('  clear   Clear collections (use --key to clear specific collection)');
+	})
+).pipe(Command.withSubcommands([configCollectionsListCommand, configCollectionsClearCommand]));
+
+// === Threads Subcommands ===
+
+const configThreadsListCommand = Command.make('list', {}, () =>
+	Effect.gen(function* () {
+		const services = yield* initializeCoreServices;
+		const threads = yield* services.threads.list();
+
+		if (threads.length === 0) {
+			console.log('No threads found.');
+			return;
+		}
+
+		console.log('Threads:\n');
+		for (const thread of threads) {
+			console.log(`  ${thread.id}`);
+			console.log(`    Questions: ${thread.questionCount}`);
+			console.log(`    Resources: ${thread.resources.join(', ') || 'none'}`);
+			if (thread.firstPrompt) {
+				const preview =
+					thread.firstPrompt.length > 50
+						? thread.firstPrompt.slice(0, 50) + '...'
+						: thread.firstPrompt;
+				console.log(`    First: "${preview}"`);
+			}
+			console.log(`    Created: ${thread.createdAt.toISOString()}`);
+			console.log();
+		}
+	}).pipe(
+		Effect.catchTag('ThreadRepositoryError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(BunContext.layer)
+	)
+);
+
+const threadIdOption = Options.text('id').pipe(Options.optional);
+
+const configThreadsDeleteCommand = Command.make('delete', { id: threadIdOption }, ({ id }) =>
+	Effect.gen(function* () {
+		const services = yield* initializeCoreServices;
+
+		let threadId: string;
+		if (id._tag === 'Some') {
+			threadId = id.value;
+		} else {
+			threadId = yield* askText('Enter thread ID to delete: ');
+		}
+
+		if (!threadId) {
+			console.log('No thread ID provided.');
+			return;
+		}
+
+		const thread = yield* services.threads.get(threadId);
+		if (!thread) {
+			console.error(`Error: Thread "${threadId}" not found.`);
+			process.exit(1);
+		}
 
 		const confirmed = yield* askConfirmation(
-			'Are you sure you want to delete these repos? (y/N): '
+			`Are you sure you want to delete thread "${threadId}"? (y/N): `
 		);
 
 		if (!confirmed) {
@@ -406,50 +700,53 @@ const configReposClearCommand = Command.make('clear', {}, () =>
 			return;
 		}
 
-		for (const repoPath of repoPaths) {
-			yield* fs.remove(repoPath, { recursive: true });
-			console.log(`Deleted: ${repoPath}`);
-		}
-
-		console.log('\nAll repos have been cleared.');
-	}).pipe(Effect.provide(programLayer))
+		yield* services.threads.delete(threadId);
+		console.log(`Deleted thread "${threadId}".`);
+	}).pipe(
+		Effect.catchTag('ThreadRepositoryError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(BunContext.layer)
+	)
 );
 
-// config repos - parent command for repo subcommands
-const configReposCommand = Command.make('repos', {}, () =>
+const configThreadsCommand = Command.make('threads', {}, () =>
 	Effect.sync(() => {
-		console.log('Usage: btca config repos <command>');
+		console.log('Usage: btca config threads <command>');
 		console.log('');
 		console.log('Commands:');
-		console.log('  list    List all configured repos');
-		console.log('  add     Add a new repo');
-		console.log('  remove  Remove a configured repo');
-		console.log('  clear   Clear all downloaded repos');
+		console.log('  list    List all threads');
+		console.log('  delete  Delete a thread');
 	})
-).pipe(
-	Command.withSubcommands([
-		configReposListCommand,
-		configReposAddCommand,
-		configReposRemoveCommand,
-		configReposClearCommand
-	])
-);
+).pipe(Command.withSubcommands([configThreadsListCommand, configThreadsDeleteCommand]));
 
 // config - parent command
 const configCommand = Command.make('config', {}, () =>
 	Effect.gen(function* () {
-		const config = yield* ConfigService;
-		const configPath = yield* config.getConfigPath();
+		const services = yield* initializeCoreServices;
+		const configPath = yield* services.config.getConfigPath();
 
 		console.log(`Config file: ${configPath}`);
 		console.log('');
 		console.log('Usage: btca config <command>');
 		console.log('');
 		console.log('Commands:');
-		console.log('  model   View or set the model and provider');
-		console.log('  repos   Manage configured repos');
-	}).pipe(Effect.provide(programLayer))
-).pipe(Command.withSubcommands([configModelCommand, configReposCommand]));
+		console.log('  model        View or set the model and provider');
+		console.log('  resources    Manage configured resources');
+		console.log('  collections  Manage collections');
+		console.log('  threads      Manage conversation threads');
+	}).pipe(Effect.provide(BunContext.layer))
+).pipe(
+	Command.withSubcommands([
+		configModelCommand,
+		configResourcesCommand,
+		configCollectionsCommand,
+		configThreadsCommand
+	])
+);
 
 // === Main Command ===
 const versionOption = Options.boolean('version').pipe(
@@ -466,7 +763,7 @@ const mainCommand = Command.make('btca', { version: versionOption }, ({ version 
 			console.log(`btca v${VERSION}. run btca --help for more information.`);
 		}
 	})
-).pipe(Command.withSubcommands([askCommand, serveCommand, chatCommand, configCommand]));
+).pipe(Command.withSubcommands([askCommand, chatCommand, configCommand]));
 
 const cliService = Effect.gen(function* () {
 	return {
@@ -481,5 +778,3 @@ const cliService = Effect.gen(function* () {
 export class CliService extends Effect.Service<CliService>()('CliService', {
 	effect: cliService
 }) {}
-
-export { type OcEvent };
