@@ -10,6 +10,7 @@ import {
 } from '../core/index.ts';
 import type { ResourceDefinition, GitResource, LocalResource } from '../core/resource/types.ts';
 import { isGitResource } from '../core/resource/types.ts';
+import { removeDirectory } from '../lib/utils/files.ts';
 
 declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
@@ -645,13 +646,7 @@ const clearResourcesCommand = Command.make('resources', {}, () =>
 			return;
 		}
 
-		yield* Effect.tryPromise({
-			try: async () => {
-				const { rm } = await import('node:fs/promises');
-				await rm(resourcesDir, { recursive: true, force: true });
-			},
-			catch: () => new Error('Failed to remove resources directory')
-		}).pipe(Effect.catchAll(() => Effect.void));
+		yield* removeDirectory(resourcesDir).pipe(Effect.catchAll(() => Effect.void));
 
 		console.log('All cached resources cleared.');
 	}).pipe(Effect.provide(BunContext.layer))
@@ -671,13 +666,7 @@ const clearCollectionsCommand = Command.make('collections', {}, () =>
 			return;
 		}
 
-		yield* Effect.tryPromise({
-			try: async () => {
-				const { rm } = await import('node:fs/promises');
-				await rm(collectionsDir, { recursive: true, force: true });
-			},
-			catch: () => new Error('Failed to remove collections directory')
-		}).pipe(Effect.catchAll(() => Effect.void));
+		yield* removeDirectory(collectionsDir).pipe(Effect.catchAll(() => Effect.void));
 
 		console.log('All collections cleared.');
 	}).pipe(Effect.provide(BunContext.layer))
@@ -698,21 +687,8 @@ const clearAllCommand = Command.make('clear', {}, () =>
 			return;
 		}
 
-		yield* Effect.tryPromise({
-			try: async () => {
-				const { rm } = await import('node:fs/promises');
-				await rm(resourcesDir, { recursive: true, force: true });
-			},
-			catch: () => new Error('Failed to remove resources directory')
-		}).pipe(Effect.catchAll(() => Effect.void));
-
-		yield* Effect.tryPromise({
-			try: async () => {
-				const { rm } = await import('node:fs/promises');
-				await rm(collectionsDir, { recursive: true, force: true });
-			},
-			catch: () => new Error('Failed to remove collections directory')
-		}).pipe(Effect.catchAll(() => Effect.void));
+		yield* removeDirectory(resourcesDir).pipe(Effect.catchAll(() => Effect.void));
+		yield* removeDirectory(collectionsDir).pipe(Effect.catchAll(() => Effect.void));
 
 		console.log('All cached resources and collections cleared.');
 	}).pipe(Effect.provide(BunContext.layer))
