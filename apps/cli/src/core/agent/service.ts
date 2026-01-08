@@ -88,7 +88,6 @@ export const buildOpenCodeConfig = (args: { resources: ResourceInfo[] }): OpenCo
 			plan: { disable: true },
 			docs: {
 				prompt,
-				disable: false,
 				description: 'Get answers about libraries and frameworks by searching their source code',
 				permission: {
 					webfetch: 'deny',
@@ -109,7 +108,12 @@ export const buildOpenCodeConfig = (args: { resources: ResourceInfo[] }): OpenCo
 					path: false,
 					todowrite: false,
 					todoread: false,
-					websearch: false
+					websearch: false,
+					webfetch: false,
+					skill: false, // TODO - GLM 4.6 hangs when skills enabled
+					task: false,
+					mcp: false,
+					edit: false
 				}
 			}
 		}
