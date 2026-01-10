@@ -10,9 +10,6 @@ export class CollectionError extends Data.TaggedError('CollectionError')<{
 	readonly cause?: unknown;
 }> {}
 
-export const getCollectionKey = (resourceNames: string[]): string => {
-	if (resourceNames.length === 0) {
-		throw new Error('Cannot generate collection key from empty resource list');
-	}
-	return [...resourceNames].sort().join('+');
+export const getCollectionKey = (resourceNames: readonly string[]): string => {
+	return [...resourceNames].sort().join("+");
 };

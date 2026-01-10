@@ -1,6 +1,6 @@
-import { FileSystem } from '@effect/platform';
-import { Context, Effect, Layer, Schema } from 'effect';
-import { ResourceDefinitionSchema, type ResourceDefinition } from '../resources/schema.ts';
+import { FileSystem } from "@effect/platform";
+import { Context, Data, Effect, Layer, Option, Schema } from "effect";
+import { ResourceDefinitionSchema, type ResourceDefinition } from "../resources/schema.ts";
 
 export const GLOBAL_CONFIG_DIR = '~/.config/btca';
 export const GLOBAL_CONFIG_FILENAME = 'btca.config.jsonc';
@@ -51,13 +51,18 @@ export const StoredConfigSchema = Schema.Struct({
 
 export type StoredConfig = typeof StoredConfigSchema.Type;
 
+export class ConfigError extends Data.TaggedError("ConfigError")<{
+	readonly message: string;
+	readonly cause?: unknown;
+}> {}
+
 export interface ConfigService {
 	readonly resourcesDirectory: string;
 	readonly collectionsDirectory: string;
 	readonly resources: readonly ResourceDefinition[];
 	readonly model: string;
 	readonly provider: string;
-	readonly getResource: (name: string) => ResourceDefinition | undefined;
+	readonly getResource: (name: string) => Option.Option<ResourceDefinition>;
 }
 
 export class Config extends Context.Tag('btca/Config')<Config, ConfigService>() {}
@@ -70,22 +75,125 @@ const expandHome = (path: string): string => {
 	return path;
 };
 
+const stripJsonc = (content: string): string => {
+	// Remove // and /* */ comments without touching strings.
+	let out = "";
+	let i = 0;
+	let inString = false;
+	let stringQuote: '"' | "'" | null = null;
+	let escaped = false;
+
+	while (i < content.length) {
+		const ch = content[i] ?? "";
+		const next = content[i + 1] ?? "";
+
+		if (inString) {
+			out += ch;
+			if (escaped) {
+				escaped = false;
+			} else if (ch === "\\") {
+				escaped = true;
+			} else if (stringQuote !== null && ch === stringQuote) {
+				inString = false;
+				stringQuote = null;
+			}
+			i += 1;
+			continue;
+		}
+
+		// Line comment
+		if (ch === "/" && next === "/") {
+			i += 2;
+			while (i < content.length && content[i] !== "\n") i += 1;
+			continue;
+		}
+
+		// Block comment
+		if (ch === "/" && next === "*") {
+			i += 2;
+			while (i < content.length) {
+				if (content[i] === "*" && content[i + 1] === "/") {
+					i += 2;
+					break;
+				}
+				i += 1;
+			}
+			continue;
+		}
+
+		if (ch === '"' || ch === "'") {
+			inString = true;
+			stringQuote = ch;
+			out += ch;
+			i += 1;
+			continue;
+		}
+
+		out += ch;
+		i += 1;
+	}
+
+	// Remove trailing commas (outside strings) so JSON.parse can handle JSONC-ish input.
+	let normalized = "";
+	inString = false;
+	stringQuote = null;
+	escaped = false;
+	i = 0;
+
+	while (i < out.length) {
+		const ch = out[i] ?? "";
+
+		if (inString) {
+			normalized += ch;
+			if (escaped) {
+				escaped = false;
+			} else if (ch === "\\") {
+				escaped = true;
+			} else if (stringQuote !== null && ch === stringQuote) {
+				inString = false;
+				stringQuote = null;
+			}
+			i += 1;
+			continue;
+		}
+
+		if (ch === '"' || ch === "'") {
+			inString = true;
+			stringQuote = ch;
+			normalized += ch;
+			i += 1;
+			continue;
+		}
+
+		if (ch === ",") {
+			let j = i + 1;
+			while (j < out.length && /\s/.test(out[j] ?? "")) j += 1;
+			const nextNonWs = out[j] ?? "";
+			if (nextNonWs === "]" || nextNonWs === "}") {
+				i += 1;
+				continue;
+			}
+		}
+
+		normalized += ch;
+		i += 1;
+	}
+
+	return normalized.trim();
+};
+
 const parseJsonc = (content: string): unknown => {
-	const stripped = content
-		.replace(/\/\/.*$/gm, '')
-		.replace(/\/\*[\s\S]*?\*\//g, '')
-		.trim();
-	return JSON.parse(stripped);
+	return JSON.parse(stripJsonc(content));
 };
 
 const createDefaultConfig = (configPath: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 
-		const configDir = configPath.slice(0, configPath.lastIndexOf('/'));
+		const configDir = configPath.slice(0, configPath.lastIndexOf("/"));
 		yield* fs
 			.makeDirectory(configDir, { recursive: true })
-			.pipe(Effect.catchAll(() => Effect.void));
+			.pipe(Effect.mapError((cause) => new ConfigError({ message: "Failed to create config directory", cause })));
 
 		const defaultStored: StoredConfig = {
 			$schema: CONFIG_SCHEMA_URL,
@@ -94,7 +202,9 @@ const createDefaultConfig = (configPath: string) =>
 			provider: DEFAULT_PROVIDER
 		};
 
-		yield* fs.writeFileString(configPath, JSON.stringify(defaultStored, null, 2));
+		yield* fs
+			.writeFileString(configPath, JSON.stringify(defaultStored, null, 2))
+			.pipe(Effect.mapError((cause) => new ConfigError({ message: "Failed to write default config", cause })));
 
 		return defaultStored;
 	});
@@ -102,9 +212,18 @@ const createDefaultConfig = (configPath: string) =>
 const loadConfigFromPath = (configPath: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		const content = yield* fs.readFileString(configPath);
-		const parsed = parseJsonc(content);
-		return yield* Schema.decodeUnknown(StoredConfigSchema)(parsed);
+		const content = yield* fs
+			.readFileString(configPath)
+			.pipe(Effect.mapError((cause) => new ConfigError({ message: "Failed to read config", cause })));
+
+		const parsed = yield* Effect.try({
+			try: () => parseJsonc(content),
+			catch: (cause) => new ConfigError({ message: "Failed to parse config JSONC", cause })
+		});
+
+		return yield* Schema.decodeUnknown(StoredConfigSchema)(parsed).pipe(
+			Effect.mapError((cause) => new ConfigError({ message: "Invalid config", cause }))
+		);
 	});
 
 const makeConfigService = (
@@ -117,7 +236,7 @@ const makeConfigService = (
 	resources: stored.resources,
 	model: stored.model,
 	provider: stored.provider,
-	getResource: (name: string) => stored.resources.find((r) => r.name === name)
+	getResource: (name: string) => Option.fromNullable(stored.resources.find((r) => r.name === name))
 });
 
 export const ConfigLive = Layer.effect(
@@ -127,7 +246,9 @@ export const ConfigLive = Layer.effect(
 		const cwd = process.cwd();
 
 		const projectConfigPath = `${cwd}/${PROJECT_CONFIG_FILENAME}`;
-		const projectConfigExists = yield* fs.exists(projectConfigPath);
+		const projectConfigExists = yield* fs
+			.exists(projectConfigPath)
+			.pipe(Effect.mapError((cause) => new ConfigError({ message: "Failed to check project config", cause })));
 
 		if (projectConfigExists) {
 			const stored = yield* loadConfigFromPath(projectConfigPath);
@@ -137,7 +258,9 @@ export const ConfigLive = Layer.effect(
 		}
 
 		const globalConfigPath = `${expandHome(GLOBAL_CONFIG_DIR)}/${GLOBAL_CONFIG_FILENAME}`;
-		const globalConfigExists = yield* fs.exists(globalConfigPath);
+		const globalConfigExists = yield* fs
+			.exists(globalConfigPath)
+			.pipe(Effect.mapError((cause) => new ConfigError({ message: "Failed to check global config", cause })));
 
 		const stored = globalConfigExists
 			? yield* loadConfigFromPath(globalConfigPath)

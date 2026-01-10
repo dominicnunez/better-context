@@ -1,11 +1,11 @@
-import { FileSystem } from '@effect/platform';
-import { Effect, Layer } from 'effect';
-import { createResourceTag, ResourceError } from '../helpers.ts';
-import { FS_RESOURCE_SYSTEM_NOTE, type BtcaGitResourceArgs } from '../types.ts';
+import { FileSystem } from "@effect/platform";
+import { Effect } from "effect";
+import { ResourceError } from "../helpers.ts";
+import type { BtcaFsResource, BtcaGitResourceArgs } from "../types.ts";
 
 const isValidGitUrl = (url: string) => /^https?:\/\//.test(url) || /^git@/.test(url);
 const isValidBranch = (branch: string) => /^[\w\-./]+$/.test(branch);
-const isValidPath = (path: string) => !path.includes('..') && /^[\w\-./]*$/.test(path);
+const isValidPath = (path: string) => !path.includes("..") && /^[\w\-./]*$/.test(path);
 
 const directoryExists = (path: string) =>
 	Effect.gen(function* () {
@@ -13,14 +13,14 @@ const directoryExists = (path: string) =>
 		const exists = yield* fs.exists(path);
 		if (!exists) return false;
 		const stat = yield* fs.stat(path);
-		return stat.type === 'Directory';
+		return stat.type === "Directory";
 	}).pipe(Effect.orElseSucceed(() => false));
 
 const runGit = (args: string[], options: { cwd?: string; quiet: boolean }) =>
 	Effect.tryPromise({
 		try: async () => {
-			const stdio = options.quiet ? 'ignore' : 'inherit';
-			const proc = Bun.spawn(['git', ...args], {
+			const stdio = options.quiet ? "ignore" : "inherit";
+			const proc = Bun.spawn(["git", ...args], {
 				cwd: options.cwd,
 				stdout: stdio,
 				stderr: stdio
@@ -48,51 +48,68 @@ const gitClone = (args: {
 	Effect.gen(function* () {
 		if (!isValidGitUrl(args.repoUrl)) {
 			yield* Effect.fail(
-				new ResourceError({ message: 'Invalid git URL', cause: new Error('URL validation failed') })
+				new ResourceError({ message: "Invalid git URL", cause: new Error("URL validation failed") })
 			);
 		}
 		if (!isValidBranch(args.repoBranch)) {
 			yield* Effect.fail(
 				new ResourceError({
-					message: 'Invalid branch name',
-					cause: new Error('Branch validation failed')
+					message: "Invalid branch name",
+					cause: new Error("Branch validation failed")
 				})
 			);
 		}
 		if (args.repoSubPath && !isValidPath(args.repoSubPath)) {
 			yield* Effect.fail(
-				new ResourceError({ message: 'Invalid path', cause: new Error('Path validation failed') })
+				new ResourceError({ message: "Invalid path", cause: new Error("Path validation failed") })
 			);
 		}
 
-		const needsSparseCheckout = args.repoSubPath && args.repoSubPath !== '/';
+		const needsSparseCheckout = args.repoSubPath && args.repoSubPath !== "/";
 
 		const cloneArgs = needsSparseCheckout
 			? [
-					'clone',
-					'--filter=blob:none',
-					'--no-checkout',
-					'--sparse',
-					'-b',
+					"clone",
+					"--filter=blob:none",
+					"--no-checkout",
+					"--sparse",
+					"-b",
 					args.repoBranch,
 					args.repoUrl,
 					args.localAbsolutePath
 				]
-			: ['clone', '--depth', '1', '-b', args.repoBranch, args.repoUrl, args.localAbsolutePath];
+			: [
+					"clone",
+					"--depth",
+					"1",
+					"-b",
+					args.repoBranch,
+					args.repoUrl,
+					args.localAbsolutePath
+				];
 
 		yield* runGit(cloneArgs, { quiet: args.quiet });
 
 		if (needsSparseCheckout) {
-			yield* runGit(['sparse-checkout', 'set', args.repoSubPath], {
+			yield* runGit(["sparse-checkout", "set", args.repoSubPath], {
 				cwd: args.localAbsolutePath,
 				quiet: args.quiet
 			});
-			yield* runGit(['checkout'], { cwd: args.localAbsolutePath, quiet: args.quiet });
+			yield* runGit(["checkout"], { cwd: args.localAbsolutePath, quiet: args.quiet });
 		}
 	});
 
-const gitPull = (args: { localAbsolutePath: string; quiet: boolean }) =>
-	runGit(['pull'], { cwd: args.localAbsolutePath, quiet: args.quiet });
+const gitUpdate = (args: { localAbsolutePath: string; branch: string; quiet: boolean }) =>
+	Effect.gen(function* () {
+		yield* runGit(["fetch", "--depth", "1", "origin", args.branch], {
+			cwd: args.localAbsolutePath,
+			quiet: args.quiet
+		});
+		yield* runGit(["reset", "--hard", `origin/${args.branch}`], {
+			cwd: args.localAbsolutePath,
+			quiet: args.quiet
+		});
+	});
 
 const ensureGitResource = (config: BtcaGitResourceArgs) =>
 	Effect.gen(function* () {
@@ -101,9 +118,23 @@ const ensureGitResource = (config: BtcaGitResourceArgs) =>
 		const exists = yield* directoryExists(localPath);
 
 		if (exists) {
-			yield* gitPull({ localAbsolutePath: localPath, quiet: config.quiet });
+			yield* gitUpdate({
+				localAbsolutePath: localPath,
+				branch: config.branch,
+				quiet: config.quiet
+			});
 		} else {
-			yield* fs.makeDirectory(config.resourcesDirectoryPath, { recursive: true });
+			yield* fs
+				.makeDirectory(config.resourcesDirectoryPath, { recursive: true })
+				.pipe(
+					Effect.mapError(
+						(cause) =>
+							new ResourceError({
+								message: "Failed to create resources directory",
+								cause
+							})
+					)
+				);
 			yield* gitClone({
 				repoUrl: config.url,
 				repoBranch: config.branch,
@@ -115,30 +146,18 @@ const ensureGitResource = (config: BtcaGitResourceArgs) =>
 		return localPath;
 	});
 
-export const loadGitResource = (config: BtcaGitResourceArgs) => {
-	const tag = createResourceTag(`git:${config.name}`);
+export const loadGitResource = (
+	config: BtcaGitResourceArgs
+): Effect.Effect<BtcaFsResource, ResourceError, FileSystem.FileSystem> =>
+	Effect.gen(function* () {
+		const localPath = yield* ensureGitResource(config);
 
-	return Layer.scoped(
-		tag,
-		Effect.gen(function* () {
-			const localPath = yield* ensureGitResource(config);
-
-			return {
-				_tag: 'fs-based',
-				name: config.name,
-				type: 'git',
-				getAbsoluteDirectoryPath: Effect.succeed(localPath),
-				getAgentInstructions: Effect.succeed(
-					[
-						`## Resource: ${config.name}`,
-						FS_RESOURCE_SYSTEM_NOTE,
-						`Path: ${localPath}`,
-						config.specialAgentInstructions ? `Notes: ${config.specialAgentInstructions}` : ''
-					]
-						.filter(Boolean)
-						.join('\n')
-				)
-			};
-		})
-	);
-};
+		return {
+			_tag: "fs-based",
+			name: config.name,
+			type: "git",
+			repoSubPath: config.repoSubPath,
+			specialAgentInstructions: config.specialAgentInstructions,
+			getAbsoluteDirectoryPath: Effect.succeed(localPath)
+		};
+	});

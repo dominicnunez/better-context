@@ -4,11 +4,12 @@ export const FS_RESOURCE_SYSTEM_NOTE =
 	'This is a btca resource - a searchable knowledge source the agent can reference.';
 
 export interface BtcaFsResource {
-	readonly _tag: 'fs-based';
+	readonly _tag: "fs-based";
 	readonly name: string;
-	readonly type: 'git';
+	readonly type: "git";
+	readonly repoSubPath: string;
+	readonly specialAgentInstructions: string;
 	readonly getAbsoluteDirectoryPath: Effect.Effect<string>;
-	readonly getAgentInstructions: Effect.Effect<string>;
 }
 
 export interface BtcaToolResource {
