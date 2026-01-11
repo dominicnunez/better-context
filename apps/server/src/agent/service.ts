@@ -70,23 +70,6 @@ export namespace Agent {
 		ask: (args: { collection: CollectionResult; question: string }) => Promise<AgentResult>;
 	};
 
-	const BTCA_PRESET_MODELS: Record<string, ProviderConfig> = {
-		opencode: {
-			models: {
-				'btca-gemini-3-flash': {
-					id: 'gemini-3-flash',
-					options: {
-						generationConfig: {
-							thinkingConfig: {
-								thinkingLevel: 'low'
-							}
-						}
-					}
-				}
-			}
-		}
-	};
-
 	const buildOpenCodeConfig = (args: { agentInstructions: string }): OpenCodeConfig => {
 		const prompt = [
 			'You are the btca server agent.',
@@ -98,7 +81,6 @@ export namespace Agent {
 		].join('\n');
 
 		return {
-			provider: BTCA_PRESET_MODELS,
 			agent: {
 				build: { disable: true },
 				explore: { disable: true },

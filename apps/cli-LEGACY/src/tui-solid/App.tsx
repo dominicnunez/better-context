@@ -2,7 +2,7 @@ import { createSignal, type Component } from 'solid-js';
 import { ConfigProvider } from './context/config-context.tsx';
 import { MessagesProvider } from './context/messages-context.tsx';
 import { render, useKeyboard, useRenderer } from '@opentui/solid';
-import { MainUi } from '.';
+import { MainUi } from './index.tsx';
 import { ConsolePosition } from '@opentui/core';
 
 const App: Component = () => {

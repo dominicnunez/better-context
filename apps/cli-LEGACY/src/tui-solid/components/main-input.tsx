@@ -1,6 +1,6 @@
 import { createEffect, createSignal, For, Show, type Component, type Setter } from 'solid-js';
 import type { KeyEvent, TextareaRenderable } from '@opentui/core';
-import { colors, getColor } from '../theme';
+import { colors, getColor } from '../theme.ts';
 import { usePaste, useTerminalDimensions } from '@opentui/solid';
 import type { InputState, CancelState, ThreadState } from '../types.ts';
 
