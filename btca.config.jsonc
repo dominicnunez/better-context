@@ -2,6 +2,13 @@
 	"$schema": "https://btca.dev/btca.schema.json",
 	"resources": [
 		{
+			"name": "daytona",
+			"type": "git",
+			"url": "https://github.com/daytonaio/daytona",
+			"branch": "main",
+			"specialNotes": "this is the full daytona codebase. focus on the guides and examples for answers"
+		},
+		{
 			"name": "svelte",
 			"type": "git",
 			"url": "https://github.com/sveltejs/svelte.dev",
