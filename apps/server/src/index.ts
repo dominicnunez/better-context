@@ -10,8 +10,10 @@ import { Context } from './context/index.ts';
 import { getErrorMessage, getErrorTag } from './errors.ts';
 import { Metrics } from './metrics/index.ts';
 import { Resources } from './resources/service.ts';
+import { GitResourceSchema, LocalResourceSchema } from './resources/schema.ts';
 import { StreamService } from './stream/service.ts';
 import type { BtcaStreamMetaEvent } from './stream/types.ts';
+import { LIMITS } from './validation/index.ts';
 
 /**
  * BTCA Server API
@@ -37,34 +39,85 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_PORT;
 // Request Schemas
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Resource name pattern: must start with a letter, alphanumeric and hyphens only.
+ */
+const RESOURCE_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9-]*$/;
+
+/**
+ * Safe name pattern for provider/model names.
+ */
+const SAFE_NAME_REGEX = /^[a-zA-Z0-9._+\-/:]+$/;
+
+/**
+ * Validated resource name field for request schemas.
+ */
+const ResourceNameField = z
+	.string()
+	.min(1, 'Resource name cannot be empty')
+	.max(LIMITS.RESOURCE_NAME_MAX)
+	.regex(RESOURCE_NAME_REGEX, 'Invalid resource name format');
+
 const QuestionRequestSchema = z.object({
-	question: z.string(),
-	resources: z.array(z.string()).optional(),
+	question: z
+		.string()
+		.min(1, 'Question cannot be empty')
+		.max(LIMITS.QUESTION_MAX, `Question too long (max ${LIMITS.QUESTION_MAX} chars)`),
+	resources: z
+		.array(ResourceNameField)
+		.max(LIMITS.MAX_RESOURCES_PER_REQUEST, `Too many resources (max ${LIMITS.MAX_RESOURCES_PER_REQUEST})`)
+		.optional(),
 	quiet: z.boolean().optional()
 });
 
 const OpencodeRequestSchema = z.object({
-	resources: z.array(z.string()).optional(),
+	resources: z
+		.array(ResourceNameField)
+		.max(LIMITS.MAX_RESOURCES_PER_REQUEST, `Too many resources (max ${LIMITS.MAX_RESOURCES_PER_REQUEST})`)
+		.optional(),
 	quiet: z.boolean().optional()
 });
 
 const UpdateModelRequestSchema = z.object({
-	provider: z.string(),
-	model: z.string()
+	provider: z
+		.string()
+		.min(1, 'Provider name cannot be empty')
+		.max(LIMITS.PROVIDER_NAME_MAX)
+		.regex(SAFE_NAME_REGEX, 'Invalid provider name format'),
+	model: z
+		.string()
+		.min(1, 'Model name cannot be empty')
+		.max(LIMITS.MODEL_NAME_MAX)
+		.regex(SAFE_NAME_REGEX, 'Invalid model name format')
 });
 
-const AddResourceRequestSchema = z.object({
-	name: z.string(),
-	type: z.enum(['git', 'local']),
-	url: z.string().optional(),
-	branch: z.string().optional(),
-	path: z.string().optional(),
-	searchPath: z.string().optional(),
-	specialNotes: z.string().optional()
+/**
+ * Add resource request - uses the full resource schemas for validation.
+ * This ensures all security checks (URL, branch, path traversal) are applied.
+ */
+const AddGitResourceRequestSchema = z.object({
+	type: z.literal('git'),
+	name: GitResourceSchema.shape.name,
+	url: GitResourceSchema.shape.url,
+	branch: GitResourceSchema.shape.branch.optional().default('main'),
+	searchPath: GitResourceSchema.shape.searchPath,
+	specialNotes: GitResourceSchema.shape.specialNotes
 });
+
+const AddLocalResourceRequestSchema = z.object({
+	type: z.literal('local'),
+	name: LocalResourceSchema.shape.name,
+	path: LocalResourceSchema.shape.path,
+	specialNotes: LocalResourceSchema.shape.specialNotes
+});
+
+const AddResourceRequestSchema = z.discriminatedUnion('type', [
+	AddGitResourceRequestSchema,
+	AddLocalResourceRequestSchema
+]);
 
 const RemoveResourceRequestSchema = z.object({
-	name: z.string()
+	name: ResourceNameField
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,14 +351,11 @@ const createApp = (deps: {
 		})
 
 		// POST /config/resources - Add a new resource
+		// All validation (URL, branch, path traversal, etc.) is handled by the schema
 		.post('/config/resources', async (c: HonoContext) => {
 			const decoded = await decodeJson(c.req.raw, AddResourceRequestSchema);
 
-			// Validate based on type
 			if (decoded.type === 'git') {
-				if (!decoded.url) {
-					throw new RequestError('URL is required for git resources');
-				}
 				const resource = {
 					type: 'git' as const,
 					name: decoded.name,
@@ -317,9 +367,6 @@ const createApp = (deps: {
 				const added = await config.addResource(resource);
 				return c.json(added, 201);
 			} else {
-				if (!decoded.path) {
-					throw new RequestError('Path is required for local resources');
-				}
 				const resource = {
 					type: 'local' as const,
 					name: decoded.name,

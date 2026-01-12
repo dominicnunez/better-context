@@ -19,12 +19,6 @@
 <section class="flex flex-col gap-14">
 	<section class="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
 		<div class="flex flex-col gap-5">
-			<div class="bc-kicker bc-reveal" style="--delay: 0ms">
-				<span class="bc-kickerDot"></span>
-				<span>Agent-grade docs search</span>
-				<span class="hidden sm:inline bc-muted">Local-first</span>
-			</div>
-
 			<h1
 				class="bc-h1 text-balance text-5xl sm:text-6xl lg:text-7xl bc-reveal"
 				style="--delay: 90ms"

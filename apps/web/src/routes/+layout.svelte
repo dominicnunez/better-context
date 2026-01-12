@@ -70,7 +70,7 @@
 				</div>
 				<div class="min-w-0 leading-tight">
 					<div class="bc-title text-sm">Better Context</div>
-					<div class="bc-subtitle text-xs">btca · local-first code answer engine</div>
+					<div class="bc-subtitle text-xs">btca · learn about tech from the actual source</div>
 				</div>
 			</a>
 

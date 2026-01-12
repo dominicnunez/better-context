@@ -3,7 +3,7 @@
 	import { getShikiStore } from '$lib/stores/ShikiStore.svelte';
 	import { getThemeStore } from '$lib/stores/ThemeStore.svelte';
 	import { BLESSED_MODELS } from '@btca/shared';
-	import { Check, ChevronRight, ChevronDown, FileText, Download } from '@lucide/svelte';
+	import { Check, ChevronRight, Download } from '@lucide/svelte';
 
 	// Import docs content as raw text
 	import SETUP_PROMPT_RAW from '$lib/assets/docs/SETUP_PROMPT.md?raw';
@@ -22,16 +22,13 @@
 		BLESSED_MODELS.find((m) => m.model === 'claude-haiku-4-5') ?? BLESSED_MODELS[0];
 	const MODEL_CMD = `btca config model -p ${recommendedModel.provider} -m ${recommendedModel.model}`;
 
-	// Step 3: Agent setup prompts - extract from the markdown file
-	const QUICK_PROMPT = `Set up btca for this project: scan package.json for major dependencies (frameworks, libraries, tools), suggest adding each as a btca resource with sensible defaults, then create a btca.config.jsonc file in the project root and update AGENTS.md with usage instructions. Ask me to confirm each resource before adding. Present defaults for repo URLs, branches, and search paths based on common patterns.`;
-
-	// Extract detailed instructions (everything after "## Detailed Instructions")
-	const DETAILED_PROMPT =
+	// Step 3: Agent setup prompt - extract detailed instructions from the markdown file
+	// (everything after "## Detailed Instructions")
+	const SETUP_PROMPT =
 		SETUP_PROMPT_RAW.split('## Detailed Instructions')[1]?.split('---')[1]?.trim() ?? '';
 
 	// Track completed steps
 	let completedSteps = $state<Set<number>>(new Set());
-	let showDetailedPrompt = $state(false);
 
 	const toggleStep = (step: number) => {
 		if (completedSteps.has(step)) {
@@ -232,66 +229,29 @@
 				project-specific config.
 			</p>
 
-			<!-- Quick Prompt -->
+			<!-- Setup Prompt -->
 			<div class="mt-4 bc-card bc-ring p-5">
 				<div class="flex items-center justify-between gap-3 mb-3">
-					<div class="text-sm font-semibold">Quick Setup Prompt</div>
-					<CopyButton text={QUICK_PROMPT} label="Copy prompt" />
+					<div class="text-sm font-semibold">Setup Prompt</div>
+					<div class="flex gap-2">
+						<a
+							href="/docs/SETUP_PROMPT.md"
+							download="SETUP_PROMPT.md"
+							class="bc-iconBtn"
+							title="Download as file"
+						>
+							<Download size={16} />
+						</a>
+						<CopyButton text={SETUP_PROMPT} label="Copy prompt" />
+					</div>
 				</div>
 
-				<div class="bc-codeFrame">
+				<div class="bc-codeFrame max-h-96 overflow-y-auto">
 					<div class="p-4">
-						<p class="text-sm leading-relaxed text-[color:hsl(var(--bc-fg))]">
-							{QUICK_PROMPT}
-						</p>
+						<pre
+							class="m-0 whitespace-pre-wrap text-sm leading-relaxed text-[color:hsl(var(--bc-fg))]">{SETUP_PROMPT}</pre>
 					</div>
 				</div>
-			</div>
-
-			<!-- Expandable Detailed Prompt -->
-			<div class="mt-4">
-				<button
-					type="button"
-					class="bc-chip w-full justify-between"
-					onclick={() => (showDetailedPrompt = !showDetailedPrompt)}
-				>
-					<span class="flex items-center gap-2">
-						<FileText size={16} />
-						<span>Detailed instructions (if your agent needs more context)</span>
-					</span>
-					<span
-						class="transition-transform duration-200"
-						style:transform={showDetailedPrompt ? 'rotate(180deg)' : 'rotate(0deg)'}
-					>
-						<ChevronDown size={16} />
-					</span>
-				</button>
-
-				{#if showDetailedPrompt}
-					<div class="mt-3 bc-card bc-ring p-5">
-						<div class="flex items-center justify-between gap-3 mb-3">
-							<div class="text-sm font-semibold">Detailed Agent Instructions</div>
-							<div class="flex gap-2">
-								<a
-									href="/docs/SETUP_PROMPT.md"
-									download="SETUP_PROMPT.md"
-									class="bc-iconBtn"
-									title="Download as file"
-								>
-									<Download size={16} />
-								</a>
-								<CopyButton text={DETAILED_PROMPT} label="Copy detailed prompt" />
-							</div>
-						</div>
-
-						<div class="bc-codeFrame max-h-96 overflow-y-auto">
-							<div class="p-4">
-								<pre
-									class="m-0 whitespace-pre-wrap text-sm leading-relaxed text-[color:hsl(var(--bc-fg))]">{DETAILED_PROMPT}</pre>
-							</div>
-						</div>
-					</div>
-				{/if}
 			</div>
 
 			<div class="mt-6">
