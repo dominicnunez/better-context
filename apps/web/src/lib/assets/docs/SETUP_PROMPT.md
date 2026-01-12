@@ -88,9 +88,10 @@ Ask: "Here's the config I'll create. Want me to change anything before I write i
 
 ## Step 4: Create Files
 
-Only after I approve the config, create:
+Only after I approve the config:
 
-- `btca.config.jsonc` in the project root
+1. Create `btca.config.jsonc` in the project root
+2. Add `.btca` to `.gitignore` (create the file if it doesn't exist, or append if it does)
 
 ## Step 5: Ask About Usage Mode
 
