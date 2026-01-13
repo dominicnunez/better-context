@@ -241,4 +241,278 @@ describe('Config', () => {
 			expect(config.getResource('global-resource')).toBeDefined();
 		});
 	});
+
+	describe('Config mutations (resource leakage prevention)', () => {
+		it('addResource only adds to project config, not global resources', async () => {
+			// Create global config with some resources
+			const globalConfigDir = path.join(testDir, '.config', 'btca');
+			await fs.mkdir(globalConfigDir, { recursive: true });
+			const globalConfig = {
+				$schema: 'https://btca.dev/btca.schema.json',
+				provider: 'global-provider',
+				model: 'global-model',
+				resources: [
+					{
+						name: 'svelte',
+						type: 'git',
+						url: 'https://github.com/sveltejs/svelte.dev',
+						branch: 'main'
+					},
+					{
+						name: 'tailwind',
+						type: 'git',
+						url: 'https://github.com/tailwindlabs/tailwindcss.com',
+						branch: 'main'
+					}
+				]
+			};
+			await fs.writeFile(
+				path.join(globalConfigDir, 'btca.config.jsonc'),
+				JSON.stringify(globalConfig)
+			);
+
+			// Create project config with one resource
+			const projectDir = path.join(testDir, 'my-project');
+			await fs.mkdir(projectDir, { recursive: true });
+			const projectConfig = {
+				$schema: 'https://btca.dev/btca.schema.json',
+				provider: 'project-provider',
+				model: 'project-model',
+				resources: [
+					{
+						name: 'myproject',
+						type: 'git',
+						url: 'https://github.com/test/myproject',
+						branch: 'main'
+					}
+				]
+			};
+			const projectConfigPath = path.join(projectDir, 'btca.config.jsonc');
+			await fs.writeFile(projectConfigPath, JSON.stringify(projectConfig));
+			process.chdir(projectDir);
+
+			const config = await Config.load();
+
+			// Verify merged state: 3 resources (2 global + 1 project)
+			expect(config.resources.length).toBe(3);
+
+			// Add a new resource
+			await config.addResource({
+				name: 'new-resource',
+				type: 'git',
+				url: 'https://github.com/test/new-resource',
+				branch: 'main'
+			});
+
+			// Verify merged state shows 4 resources
+			expect(config.resources.length).toBe(4);
+			expect(config.getResource('new-resource')).toBeDefined();
+
+			// CRITICAL: Read the project config file and verify it only has project resources
+			const savedProjectConfig = JSON.parse(await fs.readFile(projectConfigPath, 'utf-8'));
+			expect(savedProjectConfig.resources.length).toBe(2); // myproject + new-resource
+			expect(savedProjectConfig.resources.map((r: { name: string }) => r.name)).toEqual([
+				'myproject',
+				'new-resource'
+			]);
+			// Global resources should NOT be in project config
+			expect(
+				savedProjectConfig.resources.find((r: { name: string }) => r.name === 'svelte')
+			).toBeUndefined();
+			expect(
+				savedProjectConfig.resources.find((r: { name: string }) => r.name === 'tailwind')
+			).toBeUndefined();
+		});
+
+		it('removeResource only removes from project config, errors for global resources', async () => {
+			// Create global config with some resources
+			const globalConfigDir = path.join(testDir, '.config', 'btca');
+			await fs.mkdir(globalConfigDir, { recursive: true });
+			const globalConfig = {
+				$schema: 'https://btca.dev/btca.schema.json',
+				provider: 'global-provider',
+				model: 'global-model',
+				resources: [
+					{
+						name: 'svelte',
+						type: 'git',
+						url: 'https://github.com/sveltejs/svelte.dev',
+						branch: 'main'
+					},
+					{
+						name: 'tailwind',
+						type: 'git',
+						url: 'https://github.com/tailwindlabs/tailwindcss.com',
+						branch: 'main'
+					}
+				]
+			};
+			const globalConfigPath = path.join(globalConfigDir, 'btca.config.jsonc');
+			await fs.writeFile(globalConfigPath, JSON.stringify(globalConfig));
+
+			// Create project config with one resource
+			const projectDir = path.join(testDir, 'my-project');
+			await fs.mkdir(projectDir, { recursive: true });
+			const projectConfig = {
+				$schema: 'https://btca.dev/btca.schema.json',
+				provider: 'project-provider',
+				model: 'project-model',
+				resources: [
+					{
+						name: 'myproject',
+						type: 'git',
+						url: 'https://github.com/test/myproject',
+						branch: 'main'
+					}
+				]
+			};
+			const projectConfigPath = path.join(projectDir, 'btca.config.jsonc');
+			await fs.writeFile(projectConfigPath, JSON.stringify(projectConfig));
+			process.chdir(projectDir);
+
+			const config = await Config.load();
+
+			// Verify merged state: 3 resources (2 global + 1 project)
+			expect(config.resources.length).toBe(3);
+
+			// Remove the project resource
+			await config.removeResource('myproject');
+
+			// Verify merged state shows 2 resources (only global)
+			expect(config.resources.length).toBe(2);
+			expect(config.getResource('myproject')).toBeUndefined();
+
+			// CRITICAL: Read the project config file and verify it's empty
+			const savedProjectConfig = JSON.parse(await fs.readFile(projectConfigPath, 'utf-8'));
+			expect(savedProjectConfig.resources.length).toBe(0);
+			// Global resources should NOT have leaked into project config
+			expect(
+				savedProjectConfig.resources.find((r: { name: string }) => r.name === 'svelte')
+			).toBeUndefined();
+			expect(
+				savedProjectConfig.resources.find((r: { name: string }) => r.name === 'tailwind')
+			).toBeUndefined();
+
+			// Trying to remove a global resource should throw an error
+			expect(config.removeResource('svelte')).rejects.toThrow(
+				'Resource "svelte" is defined in the global config'
+			);
+
+			// Verify global config is unchanged
+			const savedGlobalConfig = JSON.parse(await fs.readFile(globalConfigPath, 'utf-8'));
+			expect(savedGlobalConfig.resources.length).toBe(2);
+			expect(savedGlobalConfig.resources.map((r: { name: string }) => r.name)).toEqual([
+				'svelte',
+				'tailwind'
+			]);
+		});
+
+		it('updateModel only updates project config, not global', async () => {
+			// Create global config
+			const globalConfigDir = path.join(testDir, '.config', 'btca');
+			await fs.mkdir(globalConfigDir, { recursive: true });
+			const globalConfig = {
+				$schema: 'https://btca.dev/btca.schema.json',
+				provider: 'global-provider',
+				model: 'global-model',
+				resources: [
+					{
+						name: 'svelte',
+						type: 'git',
+						url: 'https://github.com/sveltejs/svelte.dev',
+						branch: 'main'
+					}
+				]
+			};
+			const globalConfigPath = path.join(globalConfigDir, 'btca.config.jsonc');
+			await fs.writeFile(globalConfigPath, JSON.stringify(globalConfig));
+
+			// Create project config
+			const projectDir = path.join(testDir, 'my-project');
+			await fs.mkdir(projectDir, { recursive: true });
+			const projectConfig = {
+				$schema: 'https://btca.dev/btca.schema.json',
+				provider: 'project-provider',
+				model: 'project-model',
+				resources: []
+			};
+			const projectConfigPath = path.join(projectDir, 'btca.config.jsonc');
+			await fs.writeFile(projectConfigPath, JSON.stringify(projectConfig));
+			process.chdir(projectDir);
+
+			const config = await Config.load();
+
+			// Update the model
+			await config.updateModel('new-provider', 'new-model');
+
+			expect(config.provider).toBe('new-provider');
+			expect(config.model).toBe('new-model');
+
+			// CRITICAL: Verify project config was updated
+			const savedProjectConfig = JSON.parse(await fs.readFile(projectConfigPath, 'utf-8'));
+			expect(savedProjectConfig.provider).toBe('new-provider');
+			expect(savedProjectConfig.model).toBe('new-model');
+			// Global resources should NOT have leaked into project config
+			expect(savedProjectConfig.resources.length).toBe(0);
+
+			// Verify global config is unchanged
+			const savedGlobalConfig = JSON.parse(await fs.readFile(globalConfigPath, 'utf-8'));
+			expect(savedGlobalConfig.provider).toBe('global-provider');
+			expect(savedGlobalConfig.model).toBe('global-model');
+		});
+
+		it('mutations work correctly when only global config exists', async () => {
+			// Create global config
+			const globalConfigDir = path.join(testDir, '.config', 'btca');
+			await fs.mkdir(globalConfigDir, { recursive: true });
+			const globalConfig = {
+				$schema: 'https://btca.dev/btca.schema.json',
+				provider: 'global-provider',
+				model: 'global-model',
+				resources: [
+					{
+						name: 'svelte',
+						type: 'git',
+						url: 'https://github.com/sveltejs/svelte.dev',
+						branch: 'main'
+					}
+				]
+			};
+			const globalConfigPath = path.join(globalConfigDir, 'btca.config.jsonc');
+			await fs.writeFile(globalConfigPath, JSON.stringify(globalConfig));
+
+			// Use a directory without project config
+			const projectDir = path.join(testDir, 'my-project');
+			await fs.mkdir(projectDir, { recursive: true });
+			process.chdir(projectDir);
+
+			const config = await Config.load();
+
+			// Add a resource (should go to global)
+			await config.addResource({
+				name: 'new-resource',
+				type: 'git',
+				url: 'https://github.com/test/new-resource',
+				branch: 'main'
+			});
+
+			expect(config.resources.length).toBe(2);
+
+			// Verify global config was updated
+			const savedGlobalConfig = JSON.parse(await fs.readFile(globalConfigPath, 'utf-8'));
+			expect(savedGlobalConfig.resources.length).toBe(2);
+			expect(savedGlobalConfig.resources.map((r: { name: string }) => r.name)).toEqual([
+				'svelte',
+				'new-resource'
+			]);
+
+			// Remove a resource (should work since we're in global-only mode)
+			await config.removeResource('svelte');
+			expect(config.resources.length).toBe(1);
+
+			const savedGlobalConfig2 = JSON.parse(await fs.readFile(globalConfigPath, 'utf-8'));
+			expect(savedGlobalConfig2.resources.length).toBe(1);
+			expect(savedGlobalConfig2.resources[0].name).toBe('new-resource');
+		});
+	});
 });
