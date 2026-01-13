@@ -1,22 +1,19 @@
-import { json, error } from '@sveltejs/kit';
+import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
 	getSession,
 	updateSessionMessages,
-	updateSessionResources
+	updateSessionResources,
+	initializeSandbox
 } from '$lib/server/session-manager';
-import type { Message, BtcaChunk, BtcaStreamEvent } from '$lib/types';
+import type { Message, BtcaChunk, BtcaStreamEvent, ChatSession } from '$lib/types';
 import { nanoid } from 'nanoid';
 
 // POST /api/sessions/:sessionId/chat - Send a message and stream response
 export const POST: RequestHandler = async ({ params, request }) => {
-	const session = getSession(params.sessionId);
+	let session = getSession(params.sessionId);
 	if (!session) {
 		throw error(404, 'Session not found');
-	}
-
-	if (session.status !== 'active') {
-		throw error(400, `Session is not active: ${session.status}`);
 	}
 
 	const body = (await request.json()) as {
@@ -54,8 +51,24 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const stream = new ReadableStream({
 		async start(controller) {
 			try {
+				// If session is pending, initialize sandbox first with status updates
+				if (session!.status === 'pending') {
+					const sendStatus = (status: ChatSession['status']) => {
+						controller.enqueue(
+							encoder.encode(`data: ${JSON.stringify({ type: 'status', status })}\n\n`)
+						);
+					};
+
+					session = await initializeSandbox(params.sessionId, sendStatus);
+				}
+
+				// Check if session is now active
+				if (session!.status !== 'active') {
+					throw new Error(`Session is not active: ${session!.status}`);
+				}
+
 				// Make request to btca server
-				const response = await fetch(`${session.serverUrl}/question/stream`, {
+				const response = await fetch(`${session!.serverUrl}/question/stream`, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json'

@@ -270,66 +270,266 @@
 	.chat-messages {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 12px;
 		overflow-y: auto;
 		flex: 1;
-		padding: 16px;
+		padding: 20px;
+		max-width: 900px;
+		margin: 0 auto;
+		width: 100%;
 	}
 
 	.chat-message {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		padding: 12px;
+		padding: 16px;
 		border: 1px solid hsl(var(--bc-border));
 		background: hsl(var(--bc-surface));
 	}
 
 	.chat-message-user {
-		background: hsl(var(--bc-surface-2));
-		border-color: hsl(var(--bc-accent) / 0.3);
+		background: hsl(var(--bc-bg));
+		border-color: hsl(var(--bc-border));
+		margin-left: 40px;
 	}
 
 	.chat-message-assistant {
 		background: hsl(var(--bc-surface));
+		border-left: 3px solid hsl(var(--bc-accent));
 	}
 
 	.chat-message-system {
-		background: hsl(var(--bc-surface));
+		background: hsl(var(--bc-surface-2));
 		border-color: hsl(var(--bc-fg-muted) / 0.3);
-		font-style: italic;
+		font-style: normal;
+		padding: 12px 16px;
 	}
 
 	.chat-input-container {
-		padding: 16px;
+		padding: 20px;
 		border-top: 1px solid hsl(var(--bc-border));
 		background: hsl(var(--bc-bg));
+		max-width: 900px;
+		margin: 0 auto;
+		width: 100%;
 	}
 
 	/* Markdown prose styling */
 	.prose {
+		/* Override Tailwind Typography defaults to match bc neutrals */
+		--tw-prose-body: hsl(var(--bc-fg));
+		--tw-prose-headings: hsl(var(--bc-fg));
+		--tw-prose-lead: hsl(var(--bc-fg));
+		--tw-prose-links: hsl(var(--bc-accent));
+		--tw-prose-bold: hsl(var(--bc-fg));
+		--tw-prose-counters: hsl(var(--bc-fg-muted));
+		--tw-prose-bullets: hsl(var(--bc-fg-muted));
+		--tw-prose-hr: hsl(var(--bc-border));
+		--tw-prose-quotes: hsl(var(--bc-fg));
+		--tw-prose-quote-borders: hsl(var(--bc-border));
+		--tw-prose-captions: hsl(var(--bc-fg-muted));
+		--tw-prose-code: hsl(var(--bc-fg));
+		--tw-prose-pre-code: hsl(var(--bc-fg));
+		--tw-prose-pre-bg: hsl(var(--bc-surface-2));
+		--tw-prose-th-borders: hsl(var(--bc-border));
+		--tw-prose-td-borders: hsl(var(--bc-border));
+
 		color: hsl(var(--bc-fg));
 		line-height: 1.7;
 	}
 
-	.prose code {
+	/* Typography adds backticks around inline code by default */
+	.prose :where(code):not(:where(pre code))::before,
+	.prose :where(code):not(:where(pre code))::after {
+		content: none;
+	}
+
+	.prose :where(code):not(:where(pre code)) {
 		font-size: 0.875em;
 		padding: 0.2em 0.4em;
 		border: 1px solid hsl(var(--bc-border));
 		background: hsl(var(--bc-surface-2));
 	}
 
-	.prose pre {
+	/* Shiki code blocks */
+	.prose pre.shiki {
 		padding: 16px;
 		border: 1px solid hsl(var(--bc-border));
-		background: hsl(var(--bc-surface));
 		overflow-x: auto;
+		font-size: 13px;
+		line-height: 1.6;
 	}
 
-	.prose pre code {
+	/* Use Shiki's dual theme backgrounds */
+	.prose pre.shiki.shiki-themes {
+		background-color: var(--shiki-light-bg, hsl(var(--bc-surface-2)));
+	}
+
+	:root.dark .prose pre.shiki.shiki-themes {
+		background-color: var(--shiki-dark-bg, hsl(var(--bc-surface-2)));
+	}
+
+	.prose pre.shiki code {
 		padding: 0;
 		border: none;
 		background: transparent;
+		font-size: inherit;
+	}
+
+	/* Handle Shiki dual themes for spans */
+	.prose pre.shiki span {
+		color: var(--shiki-light, inherit);
+	}
+
+	:root.dark .prose pre.shiki span {
+		color: var(--shiki-dark, inherit);
+	}
+
+	.prose pre:not(.shiki) {
+		padding: 16px;
+		border: 1px solid hsl(var(--bc-border));
+		background: hsl(var(--bc-surface-2));
+		overflow-x: auto;
+		font-size: 13px;
+		line-height: 1.6;
+	}
+
+	.prose pre:not(.shiki) code {
+		padding: 0;
+		border: none;
+		background: transparent;
+		font-size: inherit;
+	}
+
+	.prose .shiki {
+		margin: 0;
+		border-radius: 0;
+	}
+
+	/* Mention input */
+	.bc-input-mentionWrap {
+		position: relative;
+		width: 100%;
+	}
+
+	.bc-input-mentionOverlay {
+		position: absolute;
+		inset: 0;
+		padding: 12px 16px;
+		padding-right: 48px;
+		font-size: 14px;
+		line-height: 1.5;
+		white-space: pre-wrap;
+		word-break: break-word;
+		pointer-events: none;
+		color: hsl(var(--bc-fg));
+	}
+
+	.bc-input-mentionTextarea {
+		background: transparent;
+		color: transparent;
+		caret-color: hsl(var(--bc-accent));
+	}
+
+	.bc-input-mentionPill {
+		display: inline-block;
+		padding: 0 6px;
+		border: 1px solid hsl(var(--bc-border));
+		background: hsl(var(--bc-surface-2));
+		color: hsl(var(--bc-accent));
+		font-weight: 650;
+	}
+
+	.bc-mentionMenu {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: calc(100% + 6px);
+		z-index: 30;
+		max-height: 220px;
+		overflow: auto;
+	}
+
+	.bc-mentionMenuItem {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 10px 12px;
+		cursor: pointer;
+		border-top: 1px solid hsl(var(--bc-border));
+	}
+
+	.bc-mentionMenuItem:first-child {
+		border-top: none;
+	}
+
+	.bc-mentionMenuItem[aria-selected='true'] {
+		background: hsl(var(--bc-surface-2));
+		color: hsl(var(--bc-fg));
+	}
+
+	/* Sandbox status indicator */
+	.sandbox-status-indicator {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border: 1px solid hsl(var(--bc-border));
+		background: hsl(var(--bc-surface-2));
+		flex-shrink: 0;
+	}
+
+	.sandbox-progress-bar {
+		height: 4px;
+		width: 200px;
+		background: hsl(var(--bc-surface-2));
+		border: 1px solid hsl(var(--bc-border));
+		overflow: hidden;
+	}
+
+	.sandbox-progress-fill {
+		height: 100%;
+		background: hsl(var(--bc-accent));
+		transition: width 300ms ease;
+	}
+
+	/* Reasoning block */
+	.reasoning-block {
+		padding: 8px 12px;
+		border-left: 2px solid hsl(var(--bc-fg-muted) / 0.4);
+		background: hsl(var(--bc-surface-2) / 0.5);
+		color: hsl(var(--bc-fg-muted));
+		font-size: 12px;
+		line-height: 1.5;
+	}
+
+	/* Tool indicator */
+	.tool-indicator {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 10px;
+		border: 1px solid hsl(var(--bc-border));
+		background: hsl(var(--bc-surface-2));
+		font-size: 12px;
+		width: fit-content;
+	}
+
+	.tool-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+	}
+
+	.tool-dot-pending {
+		background: hsl(var(--bc-fg-muted));
+	}
+
+	.tool-dot-completed {
+		background: hsl(var(--bc-success));
 	}
 
 	/* Spinner animation */

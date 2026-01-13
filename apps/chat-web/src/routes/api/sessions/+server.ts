@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createSession, getAllSessions, getSession } from '$lib/server/session-manager';
+import { createSession, getAllSessions } from '$lib/server/session-manager';
 
 // GET /api/sessions - List all sessions
 export const GET: RequestHandler = async () => {
@@ -18,20 +18,13 @@ export const GET: RequestHandler = async () => {
 	});
 };
 
-// POST /api/sessions - Create a new session
+// POST /api/sessions - Create a new session (lazy - no sandbox yet)
 export const POST: RequestHandler = async () => {
-	try {
-		const session = await createSession();
-		return json({
-			id: session.id,
-			status: session.status,
-			serverUrl: session.serverUrl,
-			createdAt: session.createdAt.toISOString()
-		});
-	} catch (error) {
-		return json(
-			{ error: error instanceof Error ? error.message : 'Failed to create session' },
-			{ status: 500 }
-		);
-	}
+	const session = createSession();
+	return json({
+		id: session.id,
+		status: session.status,
+		serverUrl: session.serverUrl,
+		createdAt: session.createdAt.toISOString()
+	});
 };

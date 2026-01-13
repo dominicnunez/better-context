@@ -48,6 +48,13 @@ const DEFAULT_BTCA_CONFIG = `{
 // Server port for btca serve
 const BTCA_SERVER_PORT = 3000;
 
+// Default resources parsed from config
+const DEFAULT_RESOURCES = [
+	{ name: 'svelte', type: 'git' },
+	{ name: 'svelteKit', type: 'git' },
+	{ name: 'tailwind', type: 'git' }
+];
+
 function getDaytona(): Daytona {
 	if (!daytonaInstance) {
 		daytonaInstance = new Daytona();
@@ -56,11 +63,10 @@ function getDaytona(): Daytona {
 }
 
 /**
- * Create a new chat session with a Daytona sandbox
+ * Create a new chat session (lazy - no sandbox yet)
  */
-export async function createSession(): Promise<ChatSession> {
+export function createSession(): ChatSession {
 	const sessionId = nanoid();
-	const daytona = getDaytona();
 
 	const session: ChatSession = {
 		id: sessionId,
@@ -77,12 +83,42 @@ export async function createSession(): Promise<ChatSession> {
 		threadResources: [],
 		createdAt: new Date(),
 		lastActivityAt: new Date(),
-		status: 'creating'
+		status: 'pending'
 	};
 
 	sessions.set(sessionId, session);
+	return session;
+}
+
+/**
+ * Initialize sandbox for a session (called on first message)
+ * Emits status updates via callback
+ */
+export async function initializeSandbox(
+	sessionId: string,
+	onStatusChange?: (status: ChatSession['status']) => void
+): Promise<ChatSession> {
+	const session = sessions.get(sessionId);
+	if (!session) {
+		throw new Error('Session not found');
+	}
+
+	if (session.status === 'active') {
+		return session;
+	}
+
+	if (session.status !== 'pending') {
+		throw new Error(`Cannot initialize sandbox: session status is ${session.status}`);
+	}
+
+	const daytona = getDaytona();
 
 	try {
+		// Update status: creating sandbox
+		session.status = 'creating';
+		sessions.set(sessionId, session);
+		onStatusChange?.('creating');
+
 		// Create sandbox from pre-built snapshot
 		const sandbox = await daytona.create({
 			snapshot: BTCA_SNAPSHOT_NAME,
@@ -96,8 +132,18 @@ export async function createSession(): Promise<ChatSession> {
 		session.sandboxId = sandbox.id;
 		sandboxes.set(sandbox.id, sandbox);
 
+		// Update status: cloning/configuring
+		session.status = 'cloning';
+		sessions.set(sessionId, session);
+		onStatusChange?.('cloning');
+
 		// Create btca config
 		await sandbox.fs.uploadFile(Buffer.from(DEFAULT_BTCA_CONFIG), '/root/btca.config.jsonc');
+
+		// Update status: starting server
+		session.status = 'starting';
+		sessions.set(sessionId, session);
+		onStatusChange?.('starting');
 
 		// Create a session for the long-running server process
 		const sandboxSessionId = 'btca-server-session';
@@ -136,12 +182,14 @@ export async function createSession(): Promise<ChatSession> {
 		session.serverUrl = previewInfo.url;
 		session.status = 'active';
 		sessions.set(sessionId, session);
+		onStatusChange?.('active');
 
 		return session;
 	} catch (error) {
 		session.status = 'error';
 		session.error = error instanceof Error ? error.message : 'Unknown error creating sandbox';
 		sessions.set(sessionId, session);
+		onStatusChange?.('error');
 		throw error;
 	}
 }
@@ -227,6 +275,13 @@ export function clearSession(sessionId: string): void {
 }
 
 /**
+ * Get default resources (used for pending sessions)
+ */
+export function getDefaultResources(): { name: string; type: string }[] {
+	return DEFAULT_RESOURCES;
+}
+
+/**
  * Get resources from a session's btca server
  */
 export async function getSessionResources(
@@ -234,7 +289,7 @@ export async function getSessionResources(
 ): Promise<{ name: string; type: string }[]> {
 	const session = sessions.get(sessionId);
 	if (!session || session.status !== 'active') {
-		return [];
+		return DEFAULT_RESOURCES;
 	}
 
 	try {
@@ -246,6 +301,6 @@ export async function getSessionResources(
 		return data.resources;
 	} catch (error) {
 		console.error('Error fetching resources:', error);
-		return [];
+		return DEFAULT_RESOURCES;
 	}
 }

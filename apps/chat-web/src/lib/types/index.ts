@@ -72,7 +72,7 @@ export interface ChatSession {
 	threadResources: string[];
 	createdAt: Date;
 	lastActivityAt: Date;
-	status: 'creating' | 'active' | 'error' | 'destroyed';
+	status: 'pending' | 'creating' | 'cloning' | 'starting' | 'active' | 'error' | 'destroyed';
 	error?: string;
 }
 
