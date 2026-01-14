@@ -5,16 +5,18 @@
 		Trash2,
 		Loader2,
 		Send,
-		XCircle,
 		ChevronRight,
 		Server,
 		GitBranch,
-		Zap
+		Zap,
+		Copy,
+		Check
 	} from '@lucide/svelte';
 	import type { Message, BtcaChunk, CancelState, ChatSession } from '$lib/types';
 	import { nanoid } from 'nanoid';
 	import { marked } from 'marked';
 	import { createHighlighter } from 'shiki';
+	import DOMPurify from 'isomorphic-dompurify';
 
 	// Session state
 	let sessions = $state<
@@ -49,6 +51,9 @@
 	let currentChunks = $state<BtcaChunk[]>([]);
 	let abortController: AbortController | null = null;
 
+	// Copy state
+	let copiedId = $state<string | null>(null);
+
 	// Load sessions on mount
 	$effect(() => {
 		loadSessions();
@@ -57,9 +62,7 @@
 	async function loadSessions() {
 		try {
 			const response = await fetch('/api/sessions');
-			const data = (await response.json()) as {
-				sessions: typeof sessions;
-			};
+			const data = (await response.json()) as { sessions: typeof sessions };
 			sessions = data.sessions;
 		} catch (error) {
 			console.error('Failed to load sessions:', error);
@@ -70,15 +73,8 @@
 		isCreatingSession = true;
 		try {
 			const response = await fetch('/api/sessions', { method: 'POST' });
-			const data = (await response.json()) as {
-				id: string;
-				error?: string;
-			};
-
-			if (!response.ok) {
-				throw new Error(data.error ?? 'Failed to create session');
-			}
-
+			const data = (await response.json()) as { id: string; error?: string };
+			if (!response.ok) throw new Error(data.error ?? 'Failed to create session');
 			await loadSessions();
 			await loadSession(data.id);
 		} catch (error) {
@@ -94,16 +90,10 @@
 		try {
 			const response = await fetch(`/api/sessions/${sessionId}`);
 			const data = (await response.json()) as typeof currentSession & { error?: string };
-
-			if (!response.ok) {
-				throw new Error(data?.error ?? 'Failed to load session');
-			}
-
+			if (!response.ok) throw new Error(data?.error ?? 'Failed to load session');
 			currentSession = data;
 			currentSessionId = sessionId;
 			showSessionList = false;
-
-			// Load available resources
 			await loadResources();
 		} catch (error) {
 			console.error('Failed to load session:', error);
@@ -117,9 +107,7 @@
 		if (!currentSessionId) return;
 		try {
 			const response = await fetch(`/api/sessions/${currentSessionId}/resources`);
-			const data = (await response.json()) as {
-				resources: typeof availableResources;
-			};
+			const data = (await response.json()) as { resources: typeof availableResources };
 			availableResources = data.resources;
 		} catch (error) {
 			console.error('Failed to load resources:', error);
@@ -128,11 +116,9 @@
 
 	async function destroySession(sessionId: string) {
 		if (!confirm('Are you sure you want to destroy this session?')) return;
-
 		try {
 			await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
 			await loadSessions();
-
 			if (currentSessionId === sessionId) {
 				currentSession = null;
 				currentSessionId = null;
@@ -157,7 +143,6 @@
 		}
 	}
 
-	// Parse @mentions from input
 	function parseMentions(input: string): { resources: string[]; question: string } {
 		const mentionRegex = /@(\w+)/g;
 		const resources: string[] = [];
@@ -175,18 +160,15 @@
 		const { resources: mentionedResources, question } = parseMentions(inputValue);
 		const threadResources = currentSession.threadResources || [];
 
-		// Validate resources
 		if (mentionedResources.length === 0 && threadResources.length === 0) {
 			alert('Please @mention a resource first (e.g., @svelte)');
 			return;
 		}
-
 		if (!question.trim()) {
 			alert('Please enter a question after the @mention');
 			return;
 		}
 
-		// Validate mentioned resources exist
 		const validResources: string[] = [];
 		const invalidResources: string[] = [];
 		for (const res of mentionedResources) {
@@ -194,13 +176,11 @@
 			if (found) validResources.push(found.name);
 			else invalidResources.push(res);
 		}
-
 		if (invalidResources.length > 0) {
 			alert(`Unknown resources: ${invalidResources.join(', ')}`);
 			return;
 		}
 
-		// Add user message to UI
 		const userMessage: Message = {
 			id: nanoid(),
 			role: 'user',
@@ -215,30 +195,19 @@
 		sandboxStatus = currentSession.status === 'pending' ? 'pending' : null;
 		cancelState = 'none';
 		currentChunks = [];
-
-		// Create abort controller
 		abortController = new AbortController();
 
 		try {
 			const response = await fetch(`/api/sessions/${currentSessionId}/chat`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					message: savedInput,
-					resources: validResources
-				}),
+				body: JSON.stringify({ message: savedInput, resources: validResources }),
 				signal: abortController.signal
 			});
 
-			if (!response.ok) {
-				throw new Error('Failed to send message');
-			}
+			if (!response.ok) throw new Error('Failed to send message');
+			if (!response.body) throw new Error('No response body');
 
-			if (!response.body) {
-				throw new Error('No response body');
-			}
-
-			// Process SSE stream
 			const reader = response.body.getReader();
 			const decoder = new TextDecoder();
 			let buffer = '';
@@ -270,23 +239,18 @@
 									currentSession.status = 'active';
 								}
 							} else if (event.type === 'add') {
-								sandboxStatus = null; // Clear status once streaming starts
+								sandboxStatus = null;
 								currentChunks = [...currentChunks, event.chunk];
 							} else if (event.type === 'update') {
 								currentChunks = currentChunks.map((c) => {
 									if (c.id !== event.id) return c;
-									// Cast to preserve discriminated union type
 									return { ...c, ...event.chunk } as BtcaChunk;
 								});
 							} else if (event.type === 'error') {
 								throw new Error(event.error);
 							}
 						} catch (e) {
-							if (e instanceof SyntaxError) {
-								console.error('Failed to parse event:', eventData);
-							} else {
-								throw e;
-							}
+							if (!(e instanceof SyntaxError)) throw e;
 						}
 						eventData = '';
 					}
@@ -295,39 +259,29 @@
 
 			reader.releaseLock();
 
-			// Add assistant message with final chunks
 			const assistantMessage: Message = {
 				id: nanoid(),
 				role: 'assistant',
-				content: {
-					type: 'chunks',
-					chunks: currentChunks
-				}
+				content: { type: 'chunks', chunks: currentChunks }
 			};
 			currentSession.messages = [...currentSession.messages, assistantMessage];
-
-			// Update thread resources
 			currentSession.threadResources = [...new Set([...threadResources, ...validResources])];
-
-			// Refresh sessions list to update status
 			await loadSessions();
 		} catch (error) {
 			if ((error as Error).name === 'AbortError') {
-				// Add canceled message
-				const canceledMessage: Message = {
-					id: nanoid(),
-					role: 'system',
-					content: 'Request canceled.'
-				};
-				currentSession.messages = [...currentSession.messages, canceledMessage];
+				currentSession.messages = [
+					...currentSession.messages,
+					{ id: nanoid(), role: 'system', content: 'Request canceled.' }
+				];
 			} else {
-				console.error('Failed to send message:', error);
-				const errorMessage: Message = {
-					id: nanoid(),
-					role: 'system',
-					content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-				};
-				currentSession.messages = [...currentSession.messages, errorMessage];
+				currentSession.messages = [
+					...currentSession.messages,
+					{
+						id: nanoid(),
+						role: 'system',
+						content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+					}
+				];
 			}
 		} finally {
 			isStreaming = false;
@@ -346,6 +300,7 @@
 		}
 	}
 
+	// Input handling
 	let inputEl = $state<HTMLTextAreaElement | null>(null);
 	let mentionSelectedIndex = $state(0);
 	let mentionMenuOpen = $state(false);
@@ -377,18 +332,15 @@
 			mentionRange = null;
 			return;
 		}
-
 		const cursor = inputEl.selectionStart ?? inputValue.length;
 		const range = getMentionAtCursor(inputValue, cursor);
 		mentionRange = range;
-
 		const shouldOpen = !!range && !isStreaming && availableResources.length > 0;
 		if (!shouldOpen) {
 			mentionMenuOpen = false;
 			mentionSelectedIndex = 0;
 			return;
 		}
-
 		const filtered = getFilteredResources();
 		mentionMenuOpen = filtered.length > 0;
 		mentionSelectedIndex = 0;
@@ -400,7 +352,6 @@
 		const after = inputValue.slice(mentionRange.end);
 		const insert = `@${resourceName} `;
 		inputValue = before + insert + after;
-
 		queueMicrotask(() => {
 			if (!inputEl) return;
 			const cursor = before.length + insert.length;
@@ -410,18 +361,6 @@
 			updateMentionState();
 		});
 	}
-
-	function adjustTextareaHeight() {
-		if (!inputEl) return;
-		inputEl.style.height = 'auto';
-		inputEl.style.height = `${Math.min(240, Math.max(48, inputEl.scrollHeight))}px`;
-	}
-
-	$effect(() => {
-		// Keep textarea + overlay height in sync
-		inputValue;
-		queueMicrotask(adjustTextareaHeight);
-	});
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (mentionMenuOpen) {
@@ -452,7 +391,6 @@
 				return;
 			}
 		}
-
 		if (event.key === 'Enter' && !event.shiftKey) {
 			event.preventDefault();
 			sendMessage();
@@ -460,24 +398,37 @@
 		if (event.key === 'Escape' && isStreaming) {
 			requestCancel();
 		}
-
-		queueMicrotask(() => {
-			updateMentionState();
-		});
+		queueMicrotask(updateMentionState);
 	}
 
-	// Strip conversation history markers from displayed text
+	function getPlaceholder(): string {
+		if (isStreaming && cancelState === 'pending') return 'Press Escape again to cancel';
+		if (isStreaming) return 'Press Escape to cancel';
+		return '@resource question...';
+	}
+
+	// Markdown rendering
 	function stripHistory(text: string): string {
-		const historyRegex = /=== CONVERSATION HISTORY ===[\s\S]*?=== END HISTORY ===/g;
 		return text
-			.replace(historyRegex, '')
+			.replace(/=== CONVERSATION HISTORY ===[\s\S]*?=== END HISTORY ===/g, '')
 			.replace(/^Current question:\s*/i, '')
 			.trim();
 	}
 
 	const shikiHighlighter = createHighlighter({
 		themes: ['vitesse-light', 'vitesse-dark'],
-		langs: ['elixir', 'typescript', 'svelte', 'json', 'text']
+		langs: [
+			'elixir',
+			'typescript',
+			'svelte',
+			'json',
+			'text',
+			'javascript',
+			'html',
+			'css',
+			'bash',
+			'shell'
+		]
 	});
 
 	let markdownCache = $state<Record<string, string>>({});
@@ -486,12 +437,23 @@
 	function normalizeCodeLang(langRaw: string | undefined): string {
 		const lang = (langRaw ?? '').trim().toLowerCase();
 		if (!lang) return 'text';
-		if (lang === 'ts') return 'typescript';
-		if (lang === 'svelte') return 'svelte';
-		if (lang === 'json') return 'json';
-		if (lang === 'elixir' || lang === 'ex' || lang === 'exs') return 'elixir';
-		if (lang === 'typescript') return 'typescript';
-		return 'text';
+		const langMap: Record<string, string> = {
+			ts: 'typescript',
+			js: 'javascript',
+			svelte: 'svelte',
+			json: 'json',
+			elixir: 'elixir',
+			ex: 'elixir',
+			exs: 'elixir',
+			typescript: 'typescript',
+			javascript: 'javascript',
+			html: 'html',
+			css: 'css',
+			bash: 'bash',
+			sh: 'shell',
+			shell: 'shell'
+		};
+		return langMap[lang] ?? 'text';
 	}
 
 	async function renderMarkdownWithShiki(text: string): Promise<string> {
@@ -501,14 +463,21 @@
 		const renderer = new marked.Renderer();
 		renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
 			const normalized = normalizeCodeLang(lang);
-			return highlighter.codeToHtml(text, {
+			const codeId = nanoid(8);
+			const highlighted = highlighter.codeToHtml(text, {
 				lang: normalized,
 				themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
 				defaultColor: false
 			});
+			// Wrap with copy button
+			return `<div class="code-block-wrapper" data-code-id="${codeId}"><div class="code-block-header"><span class="code-lang">${lang || 'text'}</span><button class="copy-btn" data-copy-target="${codeId}" onclick="window.copyCode('${codeId}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button></div><div class="code-content" id="code-${codeId}">${highlighted}</div><pre style="display:none" id="code-raw-${codeId}">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></div>`;
 		};
 
-		return (await marked.parse(content, { async: true, renderer })) as string;
+		const html = (await marked.parse(content, { async: true, renderer })) as string;
+		return DOMPurify.sanitize(html, {
+			ADD_TAGS: ['pre', 'code'],
+			ADD_ATTR: ['data-code-id', 'data-copy-target', 'onclick', 'class', 'id', 'style']
+		});
 	}
 
 	function getRenderedMarkdown(text: string): string {
@@ -526,38 +495,66 @@
 				});
 		}
 
-		return marked.parse(content, { async: false }) as string;
+		const html = marked.parse(content, { async: false }) as string;
+		return DOMPurify.sanitize(html, {
+			ADD_TAGS: ['pre', 'code'],
+			ADD_ATTR: ['class']
+		});
 	}
 
-	// Sort chunks for display: reasoning, tools, text
+	// Global copy function
+	if (typeof window !== 'undefined') {
+		(window as unknown as { copyCode: (id: string) => void }).copyCode = async (id: string) => {
+			const rawEl = document.getElementById(`code-raw-${id}`);
+			if (rawEl) {
+				const text = rawEl.textContent ?? '';
+				await navigator.clipboard.writeText(text);
+				copiedId = id;
+				setTimeout(() => {
+					copiedId = null;
+				}, 2000);
+			}
+		};
+	}
+
+	async function copyFullAnswer(messageId: string, chunks: BtcaChunk[]) {
+		const text = chunks
+			.filter((c): c is BtcaChunk & { type: 'text' } => c.type === 'text')
+			.map((c) => c.text)
+			.join('\n\n');
+		await navigator.clipboard.writeText(stripHistory(text));
+		copiedId = messageId;
+		setTimeout(() => {
+			copiedId = null;
+		}, 2000);
+	}
+
 	function sortChunks(chunks: BtcaChunk[]): BtcaChunk[] {
 		const reasoning: BtcaChunk[] = [];
 		const tools: BtcaChunk[] = [];
 		const text: BtcaChunk[] = [];
 		const other: BtcaChunk[] = [];
-
 		for (const chunk of chunks) {
-			switch (chunk.type) {
-				case 'reasoning':
-					reasoning.push(chunk);
-					break;
-				case 'tool':
-					tools.push(chunk);
-					break;
-				case 'text':
-					text.push(chunk);
-					break;
-				default:
-					other.push(chunk);
-			}
+			if (chunk.type === 'reasoning') reasoning.push(chunk);
+			else if (chunk.type === 'tool') tools.push(chunk);
+			else if (chunk.type === 'text') text.push(chunk);
+			else other.push(chunk);
 		}
-
 		return [...reasoning, ...tools, ...text, ...other];
+	}
+
+	function getTextContent(message: Message): string {
+		if (message.role !== 'assistant') return '';
+		if (message.content.type === 'text') return message.content.content;
+		return message.content.chunks
+			.filter((c): c is BtcaChunk & { type: 'text' } => c.type === 'text')
+			.map((c) => c.text)
+			.join('\n\n');
 	}
 </script>
 
 <div class="flex flex-1 overflow-hidden">
-	<!-- Session sidebar -->
+	<!-- Sidebar -->
 	<aside
 		class="bc-card flex w-64 flex-col border-r {showSessionList
 			? 'translate-x-0'
@@ -570,7 +567,6 @@
 				class="bc-btn bc-btn-primary p-2"
 				onclick={createNewSession}
 				disabled={isCreatingSession}
-				title="New Session"
 			>
 				{#if isCreatingSession}
 					<Loader2 size={16} class="animate-spin" />
@@ -594,23 +590,19 @@
 				>
 					<MessageSquare size={16} class="shrink-0" />
 					<div class="min-w-0 flex-1">
-						<div class="truncate text-xs font-medium">
-							{session.id.slice(0, 8)}...
-						</div>
-						<div class="bc-muted text-xs">
-							{session.messageCount} messages
-						</div>
-						<div class="bc-muted text-xs">
+						<div class="truncate text-xs font-medium">{session.id.slice(0, 8)}...</div>
+						<div class="bc-muted text-xs">{session.messageCount} messages</div>
+						<div class="text-xs">
 							{#if session.status === 'active'}
 								<span class="text-[hsl(var(--bc-success))]">Active</span>
 							{:else if session.status === 'pending'}
-								<span class="text-[hsl(var(--bc-fg-muted))]">Ready</span>
+								<span class="bc-muted">Ready</span>
 							{:else if session.status === 'creating' || session.status === 'cloning' || session.status === 'starting'}
 								<span class="text-[hsl(var(--bc-warning))]">Starting...</span>
 							{:else if session.status === 'error'}
 								<span class="text-[hsl(var(--bc-error))]">Error</span>
 							{:else}
-								<span>{session.status}</span>
+								<span class="bc-muted">{session.status}</span>
 							{/if}
 						</div>
 					</div>
@@ -621,36 +613,27 @@
 							e.stopPropagation();
 							destroySession(session.id);
 						}}
-						title="Destroy session"
 					>
 						<Trash2 size={14} />
 					</button>
 				</div>
 			{/each}
-
 			{#if sessions.length === 0}
 				<div class="bc-muted py-8 text-center text-sm">
-					No sessions yet.
-					<br />
-					Click + to create one.
+					No sessions yet.<br />Click + to create one.
 				</div>
 			{/if}
 		</div>
 	</aside>
 
-	<!-- Main chat area -->
+	<!-- Main area -->
 	<div class="flex flex-1 flex-col overflow-hidden">
 		{#if !currentSession}
 			<div class="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-				<div class="flex flex-col items-center gap-2">
-					<div class="bc-logoMark">
-						<MessageSquare size={20} />
-					</div>
-					<h2 class="text-xl font-semibold">btca Chat</h2>
-				</div>
+				<div class="bc-logoMark"><MessageSquare size={20} /></div>
+				<h2 class="text-xl font-semibold">btca Chat</h2>
 				<p class="bc-muted max-w-md text-center text-sm">
-					Ask questions about Svelte, SvelteKit, Tailwind, and more. Each session runs in an
-					isolated sandbox environment.
+					Ask questions about Svelte, SvelteKit, Tailwind, and more.
 				</p>
 				<button
 					type="button"
@@ -659,49 +642,53 @@
 					disabled={isCreatingSession}
 				>
 					{#if isCreatingSession}
-						<Loader2 size={16} class="animate-spin" />
-						Creating...
+						<Loader2 size={16} class="animate-spin" /> Creating...
 					{:else}
-						<Plus size={16} />
-						New Session
+						<Plus size={16} /> New Session
 					{/if}
 				</button>
-				<div class="bc-muted mt-4 text-xs">
-					Sandbox will be created when you send your first message.
-				</div>
+				<div class="bc-muted text-xs">Sandbox is created on first message.</div>
 			</div>
 		{:else if isLoadingSession}
 			<div class="flex flex-1 items-center justify-center">
 				<Loader2 size={32} class="animate-spin" />
 			</div>
 		{:else}
-			<!-- Chat messages -->
+			<!-- Messages -->
 			<div class="chat-messages">
 				{#each currentSession.messages as message (message.id)}
 					{#if message.role === 'user'}
 						<div class="chat-message chat-message-user">
-							<div class="mb-2 flex items-center gap-2">
-								<span class="text-xs font-semibold text-[hsl(var(--bc-fg-muted))]">You</span>
-								{#if message.resources.length > 0}
-									<div class="flex gap-1">
-										{#each message.resources as resource}
-											<span class="bc-badge">@{resource}</span>
-										{/each}
-									</div>
-								{/if}
+							<div class="mb-1 flex items-center gap-2">
+								<span class="bc-muted text-xs font-medium">You</span>
+								{#each message.resources as resource}
+									<span class="bc-badge">@{resource}</span>
+								{/each}
 							</div>
-							<div class="text-sm leading-relaxed">{stripHistory(message.content)}</div>
+							<div class="text-sm">{stripHistory(message.content)}</div>
 						</div>
 					{:else if message.role === 'assistant'}
 						<div class="chat-message chat-message-assistant">
-							<div class="mb-2 flex items-center gap-2">
-								<span class="text-xs font-semibold text-[hsl(var(--bc-success))]">AI</span>
-								{#if message.canceled}
-									<span class="bc-badge bc-badge-warning">canceled</span>
-								{/if}
+							<div class="mb-2 flex items-center justify-between">
+								<span class="text-xs font-medium text-[hsl(var(--bc-success))]">AI</span>
+								<button
+									type="button"
+									class="copy-answer-btn"
+									onclick={() =>
+										copyFullAnswer(
+											message.id,
+											message.content.type === 'chunks' ? message.content.chunks : []
+										)}
+								>
+									{#if copiedId === message.id}
+										<Check size={12} /> Copied
+									{:else}
+										<Copy size={12} /> Copy
+									{/if}
+								</button>
 							</div>
 							{#if message.content.type === 'text'}
-								<div class="prose prose-sm max-w-none prose-neutral prose-invert">
+								<div class="prose prose-sm prose-neutral prose-invert max-w-none">
 									{@html getRenderedMarkdown(message.content.content)}
 								</div>
 							{:else if message.content.type === 'chunks'}
@@ -714,17 +701,19 @@
 											</div>
 										{:else if chunk.type === 'tool'}
 											<div class="tool-indicator">
-												{#if chunk.state === 'pending'}
-													<span class="tool-dot tool-dot-pending"></span>
-												{:else if chunk.state === 'running'}
-													<Loader2 size={12} class="animate-spin text-[hsl(var(--bc-accent))]" />
+												{#if chunk.state === 'running'}
+													<Loader2 size={12} class="animate-spin" />
 												{:else}
-													<span class="tool-dot tool-dot-completed"></span>
+													<span
+														class="tool-dot {chunk.state === 'completed'
+															? 'tool-dot-completed'
+															: 'tool-dot-pending'}"
+													></span>
 												{/if}
-												<span class="font-medium">{chunk.toolName}</span>
+												<span>{chunk.toolName}</span>
 											</div>
 										{:else if chunk.type === 'text'}
-											<div class="prose prose-sm max-w-none prose-neutral prose-invert">
+											<div class="prose prose-sm prose-neutral prose-invert max-w-none">
 												{@html getRenderedMarkdown(chunk.text)}
 											</div>
 										{/if}
@@ -739,7 +728,7 @@
 					{/if}
 				{/each}
 
-				<!-- Sandbox initialization status -->
+				<!-- Sandbox status -->
 				{#if isStreaming && sandboxStatus}
 					<div class="chat-message chat-message-system">
 						<div class="flex items-center gap-3">
@@ -754,18 +743,18 @@
 									<Loader2 size={16} class="animate-spin" />
 								{/if}
 							</div>
-							<div class="flex flex-col gap-1">
-								<span class="text-sm font-medium">
+							<div>
+								<div class="text-sm font-medium">
 									{#if sandboxStatus === 'pending' || sandboxStatus === 'creating'}
-										Creating sandbox environment...
+										Creating sandbox...
 									{:else if sandboxStatus === 'cloning'}
 										Cloning repositories...
 									{:else if sandboxStatus === 'starting'}
-										Starting btca server...
+										Starting server...
 									{:else}
 										Initializing...
 									{/if}
-								</span>
+								</div>
 								<div class="sandbox-progress-bar">
 									<div
 										class="sandbox-progress-fill"
@@ -785,11 +774,11 @@
 					</div>
 				{/if}
 
-				<!-- Streaming message -->
+				<!-- Streaming -->
 				{#if isStreaming && currentChunks.length > 0}
 					<div class="chat-message chat-message-assistant">
 						<div class="mb-2 flex items-center gap-2">
-							<span class="text-xs font-semibold text-[hsl(var(--bc-success))]">AI</span>
+							<span class="text-xs font-medium text-[hsl(var(--bc-success))]">AI</span>
 							<Loader2 size={12} class="animate-spin" />
 						</div>
 						<div class="space-y-3">
@@ -801,17 +790,19 @@
 									</div>
 								{:else if chunk.type === 'tool'}
 									<div class="tool-indicator">
-										{#if chunk.state === 'pending'}
-											<span class="tool-dot tool-dot-pending"></span>
-										{:else if chunk.state === 'running'}
-											<Loader2 size={12} class="animate-spin text-[hsl(var(--bc-accent))]" />
+										{#if chunk.state === 'running'}
+											<Loader2 size={12} class="animate-spin" />
 										{:else}
-											<span class="tool-dot tool-dot-completed"></span>
+											<span
+												class="tool-dot {chunk.state === 'completed'
+													? 'tool-dot-completed'
+													: 'tool-dot-pending'}"
+											></span>
 										{/if}
-										<span class="font-medium">{chunk.toolName}</span>
+										<span>{chunk.toolName}</span>
 									</div>
 								{:else if chunk.type === 'text'}
-									<div class="prose prose-sm max-w-none">
+									<div class="prose prose-sm prose-neutral prose-invert max-w-none">
 										{@html getRenderedMarkdown(chunk.text)}
 									</div>
 								{/if}
@@ -821,11 +812,10 @@
 				{/if}
 			</div>
 
-			<!-- Input area -->
+			<!-- Input -->
 			<div class="chat-input-container">
-				<!-- Thread resources -->
 				{#if currentSession.threadResources.length > 0}
-					<div class="mb-3 flex flex-wrap items-center gap-2">
+					<div class="mb-2 flex flex-wrap items-center gap-2">
 						<span class="bc-muted text-xs">Active:</span>
 						{#each currentSession.threadResources as resource}
 							<span class="bc-badge">@{resource}</span>
@@ -833,139 +823,68 @@
 					</div>
 				{/if}
 
-				<div class="relative">
-					<div class="bc-input bc-input-mentionWrap">
-						{#if mentionMenuOpen}
-							<div class="bc-card bc-mentionMenu" role="listbox" aria-label="Mention resource">
-								<div class="bc-muted px-3 py-2 text-xs font-medium">Resources</div>
-								{#each getFilteredResources() as res, i (res.name)}
-									<div
-										class="bc-mentionMenuItem"
-										role="option"
-										tabindex="-1"
-										aria-selected={i === mentionSelectedIndex}
-										onmousedown={(e) => {
-											e.preventDefault();
-											applyMention(res.name);
-										}}
-									>
-										<span class="text-sm font-semibold">@{res.name}</span>
-										<span class="bc-muted text-xs">{res.type}</span>
-									</div>
-								{/each}
-							</div>
-						{/if}
-
-						<div
-							class="bc-input-mentionOverlay"
-							aria-hidden="true"
-							style={inputEl ? `height: ${inputEl.style.height || '48px'}; overflow: hidden;` : ''}
-						>
-							{#if !inputValue}
-								<span class="bc-muted">Type @ to mention a resource, then ask your question...</span
+				<div class="input-wrapper">
+					{#if mentionMenuOpen}
+						<div class="mention-menu">
+							{#each getFilteredResources() as res, i (res.name)}
+								<div
+									class="mention-item {i === mentionSelectedIndex ? 'mention-item-selected' : ''}"
+									role="option"
+									tabindex="-1"
+									aria-selected={i === mentionSelectedIndex}
+									onmousedown={(e) => {
+										e.preventDefault();
+										applyMention(res.name);
+									}}
 								>
-							{:else}
-								{#each (() => {
-									const parts: { type: 'text' | 'mention'; text: string }[] = [];
-									const regex = /(^|(?<=\s))@\w*/g;
-									let lastIndex = 0;
-									let match;
-									while ((match = regex.exec(inputValue)) !== null) {
-										if (match.index > lastIndex) {
-											parts.push({ type: 'text', text: inputValue.slice(lastIndex, match.index) });
-										}
-										parts.push({ type: 'mention', text: match[0] });
-										lastIndex = regex.lastIndex;
-									}
-									if (lastIndex < inputValue.length) {
-										parts.push({ type: 'text', text: inputValue.slice(lastIndex) });
-									}
-									return parts;
-								})() as part (part.text)}
-									{#if part.type === 'mention'}
-										<span class="bc-input-mentionPill">{part.text}</span>
-									{:else}
-										{part.text}
-									{/if}
-								{/each}
-							{/if}
+									<span class="font-medium">@{res.name}</span>
+									<span class="bc-muted text-xs">{res.type}</span>
+								</div>
+							{/each}
 						</div>
+					{/if}
 
-						<textarea
-							class="bc-input bc-input-mentionTextarea min-h-[48px] resize-none pr-14"
-							bind:this={inputEl}
-							bind:value={inputValue}
-							oninput={() => {
-								adjustTextareaHeight();
-								updateMentionState();
-							}}
-							onclick={updateMentionState}
-							onkeyup={updateMentionState}
-							onkeydown={handleKeydown}
-							disabled={isStreaming}
-							rows="1"
-							spellcheck="false"
-							autocomplete="off"
-							placeholder=""
-						></textarea>
-					</div>
+					<textarea
+						class="chat-input"
+						bind:this={inputEl}
+						bind:value={inputValue}
+						oninput={updateMentionState}
+						onclick={updateMentionState}
+						onkeydown={handleKeydown}
+						disabled={isStreaming}
+						rows="1"
+						placeholder={getPlaceholder()}
+					></textarea>
 
 					<button
 						type="button"
-						class="bc-btn bc-btn-primary absolute right-2 bottom-2 p-2"
+						class="send-btn"
 						onclick={sendMessage}
 						disabled={isStreaming || !inputValue.trim()}
 					>
 						{#if isStreaming}
-							<Loader2 size={16} class="animate-spin" />
+							<Loader2 size={18} class="animate-spin" />
 						{:else}
-							<Send size={16} />
+							<Send size={18} />
 						{/if}
 					</button>
 				</div>
 
-				<!-- Status bar -->
-				<div class="mt-3 flex items-center justify-between text-xs">
-					<div class="bc-muted">
+				<div class="bc-muted mt-2 flex items-center justify-between text-xs">
+					<span>
 						{#if isStreaming}
-							{#if sandboxStatus}
-								Initializing sandbox...
-							{:else if cancelState === 'pending'}
-								Press Escape again to cancel
-							{:else}
-								Streaming... (Escape to cancel)
-							{/if}
+							{cancelState === 'pending' ? 'Press Escape again to cancel' : 'Streaming...'}
 						{:else}
-							Enter to send, Shift+Enter for new line
+							Enter to send
 						{/if}
-					</div>
-					<div class="flex gap-2">
-						{#if isStreaming}
-							<button
-								type="button"
-								class="bc-chip px-2 py-1 text-xs"
-								onclick={requestCancel}
-								title="Cancel"
-							>
-								<XCircle size={12} />
-								Cancel
-							</button>
-						{:else}
-							<button
-								type="button"
-								class="bc-chip px-2 py-1 text-xs"
-								onclick={clearChat}
-								title="Clear chat"
-							>
-								Clear
-							</button>
-						{/if}
-					</div>
+					</span>
+					{#if !isStreaming}
+						<button type="button" class="text-xs hover:underline" onclick={clearChat}>Clear</button>
+					{/if}
 				</div>
 
-				<!-- Available resources hint -->
 				{#if availableResources.length > 0 && !inputValue.includes('@') && !currentSession.threadResources.length}
-					<div class="bc-muted mt-2 text-xs">
+					<div class="bc-muted mt-1 text-xs">
 						Available: {availableResources.map((r) => `@${r.name}`).join(', ')}
 					</div>
 				{/if}
@@ -973,7 +892,7 @@
 		{/if}
 	</div>
 
-	<!-- Mobile toggle for sidebar -->
+	<!-- Mobile sidebar toggle -->
 	<button
 		type="button"
 		class="bc-btn fixed bottom-4 left-4 z-20 p-2 md:hidden"

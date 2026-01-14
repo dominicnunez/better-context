@@ -76,12 +76,40 @@ export interface ChatSession {
 	error?: string;
 }
 
-// Stream event types (from btca server)
+// Stream event types (from btca server - matching apps/server/src/stream/types.ts)
+const BtcaModelSchema = z.object({
+	provider: z.string(),
+	model: z.string()
+});
+
+const BtcaCollectionInfoSchema = z.object({
+	key: z.string(),
+	path: z.string()
+});
+
+const BtcaToolStateSchema = z.object({
+	status: z.enum(['pending', 'running', 'completed', 'error']),
+	input: z.record(z.unknown()).optional(),
+	output: z.string().optional(),
+	title: z.string().optional(),
+	metadata: z.record(z.unknown()).optional(),
+	error: z.string().optional(),
+	raw: z.string().optional(),
+	time: z
+		.object({
+			start: z.number(),
+			end: z.number().optional(),
+			compacted: z.number().optional()
+		})
+		.optional()
+});
+
 export const BtcaStreamEventSchema = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('meta'),
-		model: z.string().optional(),
-		provider: z.string().optional()
+		model: BtcaModelSchema,
+		resources: z.array(z.string()),
+		collection: BtcaCollectionInfoSchema
 	}),
 	z.object({
 		type: z.literal('text.delta'),
@@ -95,16 +123,24 @@ export const BtcaStreamEventSchema = z.discriminatedUnion('type', [
 		type: z.literal('tool.updated'),
 		callID: z.string(),
 		tool: z.string(),
-		state: z.object({
-			status: z.enum(['pending', 'running', 'completed', 'error'])
-		})
+		state: BtcaToolStateSchema
 	}),
 	z.object({
-		type: z.literal('done')
+		type: z.literal('done'),
+		text: z.string(),
+		reasoning: z.string(),
+		tools: z.array(
+			z.object({
+				callID: z.string(),
+				tool: z.string(),
+				state: BtcaToolStateSchema
+			})
+		)
 	}),
 	z.object({
 		type: z.literal('error'),
-		error: z.string()
+		tag: z.string(),
+		message: z.string()
 	})
 ]);
 

@@ -8,6 +8,13 @@ import {
 } from '$lib/server/session-manager';
 import type { Message, BtcaChunk, BtcaStreamEvent, ChatSession } from '$lib/types';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
+
+// Request body schema
+const ChatRequestSchema = z.object({
+	message: z.string().min(1, 'Message is required'),
+	resources: z.array(z.string())
+});
 
 // POST /api/sessions/:sessionId/chat - Send a message and stream response
 export const POST: RequestHandler = async ({ params, request }) => {
@@ -16,12 +23,24 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		throw error(404, 'Session not found');
 	}
 
-	const body = (await request.json()) as {
-		message: string;
-		resources: string[];
-	};
+	// Validate request body
+	const rawBody = await request.json();
+	const parseResult = ChatRequestSchema.safeParse(rawBody);
+	if (!parseResult.success) {
+		throw error(
+			400,
+			`Invalid request: ${parseResult.error.issues.map((i) => i.message).join(', ')}`
+		);
+	}
 
-	const { message, resources } = body;
+	const { message, resources } = parseResult.data;
+
+	// Build conversation history BEFORE adding the new user message
+	const previousMessages = session.messages;
+	const history = buildConversationHistory(previousMessages);
+	const questionWithHistory = history
+		? `=== CONVERSATION HISTORY ===\n${history}\n=== END HISTORY ===\n\nCurrent question: ${message}`
+		: message;
 
 	// Add user message
 	const userMessage: Message = {
@@ -36,14 +55,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	updateSessionResources(params.sessionId, updatedResources);
 
 	// Add messages to session
-	const updatedMessages = [...session.messages, userMessage];
+	const updatedMessages = [...previousMessages, userMessage];
 	updateSessionMessages(params.sessionId, updatedMessages);
-
-	// Build conversation history
-	const history = buildConversationHistory(session.messages);
-	const questionWithHistory = history
-		? `=== CONVERSATION HISTORY ===\n${history}\n=== END HISTORY ===\n\nCurrent question: ${message}`
-		: message;
 
 	// Create streaming response
 	const encoder = new TextEncoder();
@@ -135,15 +148,15 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					role: 'assistant',
 					content: {
 						type: 'chunks',
-						chunks: chunkOrder.map((id) => chunksById.get(id)!)
+						chunks: chunkOrder
+							.map((id) => chunksById.get(id))
+							.filter((c): c is BtcaChunk => c !== undefined)
 					}
 				};
 
-				// Update session with assistant message
-				const currentSession = getSession(params.sessionId);
-				if (currentSession) {
-					updateSessionMessages(params.sessionId, [...currentSession.messages, assistantMessage]);
-				}
+				// Update session with assistant message using the messages we already have
+				// This avoids race conditions from re-fetching the session
+				updateSessionMessages(params.sessionId, [...updatedMessages, assistantMessage]);
 
 				// Send done event
 				controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));

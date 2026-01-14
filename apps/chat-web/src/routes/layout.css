@@ -270,11 +270,11 @@
 	.chat-messages {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 16px;
 		overflow-y: auto;
 		flex: 1;
 		padding: 20px;
-		max-width: 900px;
+		max-width: 800px;
 		margin: 0 auto;
 		width: 100%;
 	}
@@ -282,37 +282,125 @@
 	.chat-message {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 16px;
-		border: 1px solid hsl(var(--bc-border));
-		background: hsl(var(--bc-surface));
+		padding: 12px 16px;
 	}
 
 	.chat-message-user {
-		background: hsl(var(--bc-bg));
-		border-color: hsl(var(--bc-border));
-		margin-left: 40px;
+		background: hsl(var(--bc-surface-2));
+		border: 1px solid hsl(var(--bc-border));
 	}
 
 	.chat-message-assistant {
-		background: hsl(var(--bc-surface));
-		border-left: 3px solid hsl(var(--bc-accent));
+		background: transparent;
+		padding-left: 0;
+		padding-right: 0;
 	}
 
 	.chat-message-system {
-		background: hsl(var(--bc-surface-2));
-		border-color: hsl(var(--bc-fg-muted) / 0.3);
-		font-style: normal;
+		background: hsl(var(--bc-surface));
+		border: 1px solid hsl(var(--bc-border));
 		padding: 12px 16px;
 	}
 
 	.chat-input-container {
-		padding: 20px;
+		padding: 16px 20px;
 		border-top: 1px solid hsl(var(--bc-border));
 		background: hsl(var(--bc-bg));
-		max-width: 900px;
+		max-width: 800px;
 		margin: 0 auto;
 		width: 100%;
+	}
+
+	/* Simple input wrapper */
+	.input-wrapper {
+		position: relative;
+	}
+
+	.chat-input {
+		width: 100%;
+		padding: 12px 50px 12px 14px;
+		border: 1px solid hsl(var(--bc-accent));
+		background: hsl(var(--bc-surface));
+		color: hsl(var(--bc-fg));
+		font-size: 14px;
+		font-family: var(--font-family-geist-mono);
+		resize: none;
+		min-height: 48px;
+		max-height: 200px;
+		line-height: 1.5;
+	}
+
+	.chat-input:focus {
+		outline: none;
+		border-color: hsl(var(--bc-accent));
+	}
+
+	.chat-input::placeholder {
+		color: hsl(var(--bc-fg-muted));
+	}
+
+	.chat-input:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.send-btn {
+		position: absolute;
+		right: 8px;
+		top: 50%;
+		transform: translateY(-50%);
+		padding: 6px;
+		background: hsl(var(--bc-fg));
+		color: hsl(var(--bc-bg));
+		border: none;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.send-btn:hover:not(:disabled) {
+		background: hsl(var(--bc-accent));
+	}
+
+	.send-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	/* Mention menu */
+	.mention-menu {
+		position: absolute;
+		bottom: calc(100% + 4px);
+		left: 0;
+		right: 0;
+		background: hsl(var(--bc-surface));
+		border: 1px solid hsl(var(--bc-accent));
+		max-height: 200px;
+		overflow-y: auto;
+		z-index: 50;
+	}
+
+	.mention-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 10px 14px;
+		cursor: pointer;
+		border-bottom: 1px solid hsl(var(--bc-border));
+	}
+
+	.mention-item:last-child {
+		border-bottom: none;
+	}
+
+	.mention-item:hover,
+	.mention-item-selected {
+		background: hsl(var(--bc-surface-2));
+	}
+
+	.mention-item-selected {
+		color: hsl(var(--bc-accent));
 	}
 
 	/* Markdown prose styling */
@@ -352,122 +440,119 @@
 		background: hsl(var(--bc-surface-2));
 	}
 
-	/* Shiki code blocks */
-	.prose pre.shiki {
-		padding: 16px;
+	/* Code block wrapper with copy button */
+	.code-block-wrapper {
 		border: 1px solid hsl(var(--bc-border));
-		overflow-x: auto;
-		font-size: 13px;
-		line-height: 1.6;
+		margin: 12px 0;
 	}
 
-	/* Use Shiki's dual theme backgrounds */
-	.prose pre.shiki.shiki-themes {
-		background-color: var(--shiki-light-bg, hsl(var(--bc-surface-2)));
-	}
-
-	:root.dark .prose pre.shiki.shiki-themes {
-		background-color: var(--shiki-dark-bg, hsl(var(--bc-surface-2)));
-	}
-
-	.prose pre.shiki code {
-		padding: 0;
-		border: none;
-		background: transparent;
-		font-size: inherit;
-	}
-
-	/* Handle Shiki dual themes for spans */
-	.prose pre.shiki span {
-		color: var(--shiki-light, inherit);
-	}
-
-	:root.dark .prose pre.shiki span {
-		color: var(--shiki-dark, inherit);
-	}
-
-	.prose pre:not(.shiki) {
-		padding: 16px;
-		border: 1px solid hsl(var(--bc-border));
-		background: hsl(var(--bc-surface-2));
-		overflow-x: auto;
-		font-size: 13px;
-		line-height: 1.6;
-	}
-
-	.prose pre:not(.shiki) code {
-		padding: 0;
-		border: none;
-		background: transparent;
-		font-size: inherit;
-	}
-
-	.prose .shiki {
-		margin: 0;
-		border-radius: 0;
-	}
-
-	/* Mention input */
-	.bc-input-mentionWrap {
-		position: relative;
-		width: 100%;
-	}
-
-	.bc-input-mentionOverlay {
-		position: absolute;
-		inset: 0;
-		padding: 12px 16px;
-		padding-right: 48px;
-		font-size: 14px;
-		line-height: 1.5;
-		white-space: pre-wrap;
-		word-break: break-word;
-		pointer-events: none;
-		color: hsl(var(--bc-fg));
-	}
-
-	.bc-input-mentionTextarea {
-		background: transparent;
-		color: transparent;
-		caret-color: hsl(var(--bc-accent));
-	}
-
-	.bc-input-mentionPill {
-		display: inline-block;
-		padding: 0 6px;
-		border: 1px solid hsl(var(--bc-border));
-		background: hsl(var(--bc-surface-2));
-		color: hsl(var(--bc-accent));
-		font-weight: 650;
-	}
-
-	.bc-mentionMenu {
-		position: absolute;
-		left: 0;
-		right: 0;
-		bottom: calc(100% + 6px);
-		z-index: 30;
-		max-height: 220px;
-		overflow: auto;
-	}
-
-	.bc-mentionMenuItem {
+	.code-block-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
-		padding: 10px 12px;
+		padding: 6px 12px;
+		background: hsl(var(--bc-surface-2));
+		border-bottom: 1px solid hsl(var(--bc-border));
+		font-size: 12px;
+	}
+
+	.code-lang {
+		color: hsl(var(--bc-fg-muted));
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.copy-btn {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 8px;
+		background: transparent;
+		border: 1px solid hsl(var(--bc-border));
+		color: hsl(var(--bc-fg-muted));
+		font-size: 11px;
 		cursor: pointer;
-		border-top: 1px solid hsl(var(--bc-border));
+		transition: all 100ms ease;
 	}
 
-	.bc-mentionMenuItem:first-child {
-		border-top: none;
+	.copy-btn:hover {
+		background: hsl(var(--bc-surface));
+		color: hsl(var(--bc-fg));
+		border-color: hsl(var(--bc-fg-muted));
 	}
 
-	.bc-mentionMenuItem[aria-selected='true'] {
+	.code-content {
+		overflow-x: auto;
+	}
+
+	.code-content pre.shiki {
+		margin: 0;
+		padding: 12px 14px;
+		border: none;
+		font-size: 13px;
+		line-height: 1.6;
+	}
+
+	/* Shiki theme handling */
+	.code-content pre.shiki.shiki-themes {
+		background-color: var(--shiki-light-bg, hsl(var(--bc-surface)));
+	}
+
+	:root.dark .code-content pre.shiki.shiki-themes {
+		background-color: var(--shiki-dark-bg, hsl(var(--bc-surface)));
+	}
+
+	.code-content pre.shiki code {
+		padding: 0;
+		border: none;
+		background: transparent;
+		font-size: inherit;
+	}
+
+	.code-content pre.shiki span {
+		color: var(--shiki-light, inherit);
+	}
+
+	:root.dark .code-content pre.shiki span {
+		color: var(--shiki-dark, inherit);
+	}
+
+	/* Fallback for non-wrapped code blocks */
+	.prose pre:not(.shiki):not(.code-content pre) {
+		padding: 12px 14px;
+		border: 1px solid hsl(var(--bc-border));
+		background: hsl(var(--bc-surface));
+		overflow-x: auto;
+		font-size: 13px;
+		line-height: 1.6;
+		margin: 12px 0;
+	}
+
+	.prose pre code {
+		padding: 0;
+		border: none;
+		background: transparent;
+		font-size: inherit;
+	}
+
+	/* Copy answer button */
+	.copy-answer-btn {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 8px;
+		background: transparent;
+		border: 1px solid hsl(var(--bc-border));
+		color: hsl(var(--bc-fg-muted));
+		font-size: 11px;
+		cursor: pointer;
+		transition: all 100ms ease;
+	}
+
+	.copy-answer-btn:hover {
 		background: hsl(var(--bc-surface-2));
 		color: hsl(var(--bc-fg));
+		border-color: hsl(var(--bc-fg-muted));
 	}
 
 	/* Sandbox status indicator */

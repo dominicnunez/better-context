@@ -7,7 +7,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"start": "node build",
+		"start": "bun build/index.js",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
@@ -31,6 +31,7 @@
 	"dependencies": {
 		"@daytonaio/sdk": "^0.130.0",
 		"@lucide/svelte": "^0.560.0",
+		"isomorphic-dompurify": "^2.35.0",
 		"marked": "^15.0.12",
 		"nanoid": "^5.1.5",
 		"shiki": "^1.0.0",

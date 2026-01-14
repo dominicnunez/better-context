@@ -2,6 +2,16 @@ import { Daytona, type Sandbox } from '@daytonaio/sdk';
 import { nanoid } from 'nanoid';
 import type { ChatSession, Message } from '../types/index.ts';
 
+// Validate required environment variables
+const REQUIRED_ENV_VARS = ['DAYTONA_API_KEY', 'OPENCODE_API_KEY'] as const;
+
+function validateEnvVars(): void {
+	const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+	if (missing.length > 0) {
+		throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+	}
+}
+
 // In-memory session storage
 const sessions = new Map<string, ChatSession>();
 const sandboxes = new Map<string, Sandbox>();
@@ -57,6 +67,7 @@ const DEFAULT_RESOURCES = [
 
 function getDaytona(): Daytona {
 	if (!daytonaInstance) {
+		validateEnvVars();
 		daytonaInstance = new Daytona();
 	}
 	return daytonaInstance;
@@ -124,7 +135,7 @@ export async function initializeSandbox(
 			snapshot: BTCA_SNAPSHOT_NAME,
 			envVars: {
 				NODE_ENV: 'production',
-				OPENCODE_API_KEY: process.env.OPENCODE_API_KEY!
+				OPENCODE_API_KEY: process.env.OPENCODE_API_KEY ?? ''
 			},
 			public: true
 		});
@@ -163,7 +174,7 @@ export async function initializeSandbox(
 			await new Promise((resolve) => setTimeout(resolve, 2000));
 
 			const healthCheck = await sandbox.process.executeCommand(
-				`curl -s -o /dev/null -w "%{http_code}" http://localhost:${BTCA_SERVER_PORT}/`
+				`curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:${BTCA_SERVER_PORT}/`
 			);
 
 			const statusCode = healthCheck.result.trim();
@@ -186,6 +197,19 @@ export async function initializeSandbox(
 
 		return session;
 	} catch (error) {
+		// Clean up sandbox if it was created
+		if (session.sandboxId) {
+			const sandbox = sandboxes.get(session.sandboxId);
+			if (sandbox) {
+				try {
+					await sandbox.delete();
+				} catch (cleanupError) {
+					console.error('Failed to clean up sandbox:', cleanupError);
+				}
+				sandboxes.delete(session.sandboxId);
+			}
+		}
+
 		session.status = 'error';
 		session.error = error instanceof Error ? error.message : 'Unknown error creating sandbox';
 		sessions.set(sessionId, session);
@@ -252,7 +276,7 @@ export async function destroySession(sessionId: string): Promise<void> {
 	}
 
 	session.status = 'destroyed';
-	sessions.set(sessionId, session);
+	sessions.delete(sessionId);
 }
 
 /**
