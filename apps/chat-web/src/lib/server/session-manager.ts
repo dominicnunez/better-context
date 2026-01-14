@@ -1,16 +1,7 @@
 import { Daytona, type Sandbox } from '@daytonaio/sdk';
 import { nanoid } from 'nanoid';
 import type { ChatSession, Message } from '../types/index.ts';
-
-// Validate required environment variables
-const REQUIRED_ENV_VARS = ['DAYTONA_API_KEY', 'OPENCODE_API_KEY'] as const;
-
-function validateEnvVars(): void {
-	const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
-	if (missing.length > 0) {
-		throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
-	}
-}
+import { env } from '$env/dynamic/private';
 
 // In-memory session storage
 const sessions = new Map<string, ChatSession>();
@@ -67,8 +58,10 @@ const DEFAULT_RESOURCES = [
 
 function getDaytona(): Daytona {
 	if (!daytonaInstance) {
-		validateEnvVars();
-		daytonaInstance = new Daytona();
+		daytonaInstance = new Daytona({
+			apiKey: env.DAYTONA_API_KEY,
+			apiUrl: env.DAYTONA_API_URL
+		});
 	}
 	return daytonaInstance;
 }
@@ -135,7 +128,7 @@ export async function initializeSandbox(
 			snapshot: BTCA_SNAPSHOT_NAME,
 			envVars: {
 				NODE_ENV: 'production',
-				OPENCODE_API_KEY: process.env.OPENCODE_API_KEY ?? ''
+				OPENCODE_API_KEY: env.OPENCODE_API_KEY
 			},
 			public: true
 		});
