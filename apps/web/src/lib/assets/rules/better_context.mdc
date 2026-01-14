@@ -118,8 +118,9 @@ btca config model -p <provider> -m <model>
 
 **If user says "change the model" without specifying which, ask:**
 > Which model would you like to use? Recommended options with `opencode` provider:
-> - `claude-haiku-4-5` – fast, recommended, Highly recommended
-> - `big-pickle` – free, surprisingly good
+> - `claude-haiku-4-5` – fast, highly recommended
+> - `big-pickle` – free, surprisingly good (default)
+> - `minimax-m2.1-free` – very fast, very cheap
 > - `kimi-k2` – no reasoning
 
 ---
