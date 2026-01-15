@@ -25,7 +25,7 @@ describe('Git Resource', () => {
 					name: 'test-repo',
 					url: 'https://github.com/honojs/hono',
 					branch: 'main',
-					repoSubPath: 'docs',
+					repoSubPaths: ['docs'],
 					resourcesDirectoryPath: testDir,
 					specialAgentInstructions: 'Test notes',
 					quiet: true
@@ -36,7 +36,7 @@ describe('Git Resource', () => {
 				expect(resource._tag).toBe('fs-based');
 				expect(resource.name).toBe('test-repo');
 				expect(resource.type).toBe('git');
-				expect(resource.repoSubPath).toBe('docs');
+				expect(resource.repoSubPaths).toEqual(['docs']);
 				expect(resource.specialAgentInstructions).toBe('Test notes');
 
 				const resourcePath = await resource.getAbsoluteDirectoryPath();
@@ -55,7 +55,7 @@ describe('Git Resource', () => {
 					name: 'update-test',
 					url: 'https://github.com/honojs/hono',
 					branch: 'main',
-					repoSubPath: '',
+					repoSubPaths: [],
 					resourcesDirectoryPath: testDir,
 					specialAgentInstructions: '',
 					quiet: true
@@ -77,7 +77,7 @@ describe('Git Resource', () => {
 				name: 'invalid-url',
 				url: 'not-a-valid-url',
 				branch: 'main',
-				repoSubPath: '',
+				repoSubPaths: [],
 				resourcesDirectoryPath: testDir,
 				specialAgentInstructions: '',
 				quiet: true
@@ -92,7 +92,7 @@ describe('Git Resource', () => {
 				name: 'invalid-branch',
 				url: 'https://github.com/test/repo',
 				branch: 'invalid branch name!',
-				repoSubPath: '',
+				repoSubPaths: [],
 				resourcesDirectoryPath: testDir,
 				specialAgentInstructions: '',
 				quiet: true
@@ -107,7 +107,7 @@ describe('Git Resource', () => {
 				name: 'path-traversal',
 				url: 'https://github.com/test/repo',
 				branch: 'main',
-				repoSubPath: '../../../etc',
+				repoSubPaths: ['../../../etc'],
 				resourcesDirectoryPath: testDir,
 				specialAgentInstructions: '',
 				quiet: true
