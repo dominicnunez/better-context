@@ -1,6 +1,9 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
+import { internal } from './_generated/api';
+import { AnalyticsEvents } from './analyticsEvents';
+
 export const listByUser = query({
 	args: { userId: v.id('instances') },
 	handler: async (ctx, args) => {
@@ -26,6 +29,8 @@ export const create = mutation({
 		name: v.string()
 	},
 	handler: async (ctx, args) => {
+		const instance = await ctx.db.get(args.userId);
+
 		const key = generateApiKey();
 		const keyHash = await hashApiKey(key);
 		const keyPrefix = key.slice(0, 8);
@@ -37,6 +42,18 @@ export const create = mutation({
 			keyPrefix,
 			createdAt: Date.now()
 		});
+
+		if (instance) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.API_KEY_CREATED,
+				properties: {
+					instanceId: args.userId,
+					keyId: id,
+					keyName: args.name
+				}
+			});
+		}
 
 		return { id, key };
 	}
@@ -54,9 +71,23 @@ function generateApiKey(): string {
 export const revoke = mutation({
 	args: { keyId: v.id('apiKeys') },
 	handler: async (ctx, args) => {
+		const apiKey = await ctx.db.get(args.keyId);
+		const instance = apiKey ? await ctx.db.get(apiKey.instanceId) : null;
+
 		await ctx.db.patch(args.keyId, {
 			revokedAt: Date.now()
 		});
+
+		if (instance && apiKey) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.API_KEY_REVOKED,
+				properties: {
+					instanceId: apiKey.instanceId,
+					keyId: args.keyId
+				}
+			});
+		}
 	}
 });
 
@@ -95,9 +126,23 @@ export const validate = query({
 export const touchLastUsed = mutation({
 	args: { keyId: v.id('apiKeys') },
 	handler: async (ctx, args) => {
+		const apiKey = await ctx.db.get(args.keyId);
+		const instance = apiKey ? await ctx.db.get(apiKey.instanceId) : null;
+
 		await ctx.db.patch(args.keyId, {
 			lastUsedAt: Date.now()
 		});
+
+		if (instance && apiKey) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.API_KEY_USED,
+				properties: {
+					instanceId: apiKey.instanceId,
+					keyId: args.keyId
+				}
+			});
+		}
 	}
 });
 

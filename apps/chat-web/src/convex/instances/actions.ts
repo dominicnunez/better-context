@@ -3,9 +3,10 @@
 import { Daytona, type Sandbox } from '@daytonaio/sdk';
 import { v } from 'convex/values';
 
-import { api } from '../_generated/api';
+import { api, internal } from '../_generated/api';
 import type { Doc, Id } from '../_generated/dataModel';
 import { action, internalAction, type ActionCtx } from '../_generated/server';
+import { AnalyticsEvents } from '../analyticsEvents';
 import { instances } from '../apiHelpers';
 
 const instanceQueries = instances.queries;
@@ -209,6 +210,16 @@ export const provision = action({
 	args: instanceArgs,
 	handler: async (ctx, args) => {
 		requireEnv('OPENCODE_API_KEY');
+
+		const instance = await requireInstance(ctx, args.instanceId);
+		const provisionStartedAt = Date.now();
+
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.SANDBOX_PROVISIONING_STARTED,
+			properties: { instanceId: args.instanceId }
+		});
+
 		await ctx.runMutation(instanceMutations.updateState, {
 			instanceId: args.instanceId,
 			state: 'provisioning'
@@ -244,6 +255,19 @@ export const provision = action({
 				instanceId: args.instanceId
 			});
 
+			const durationMs = Date.now() - provisionStartedAt;
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.SANDBOX_PROVISIONED,
+				properties: {
+					instanceId: args.instanceId,
+					sandboxId: sandbox.id,
+					durationMs,
+					btcaVersion: versions.btcaVersion,
+					opencodeVersion: versions.opencodeVersion
+				}
+			});
+
 			return { sandboxId: sandbox.id };
 		} catch (error) {
 			if (sandbox) {
@@ -255,6 +279,18 @@ export const provision = action({
 			}
 
 			const message = getErrorMessage(error);
+			const durationMs = Date.now() - provisionStartedAt;
+
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.SANDBOX_PROVISIONING_FAILED,
+				properties: {
+					instanceId: args.instanceId,
+					error: message,
+					durationMs
+				}
+			});
+
 			await ctx.runMutation(instanceMutations.setError, {
 				instanceId: args.instanceId,
 				errorMessage: message
@@ -311,10 +347,12 @@ export const destroy = action({
 	args: instanceArgs,
 	handler: async (ctx, args) => {
 		const instance = await requireInstance(ctx, args.instanceId);
-		if (instance.sandboxId) {
+		const sandboxId = instance.sandboxId;
+
+		if (sandboxId) {
 			const daytona = getDaytona();
 			try {
-				const sandbox = await daytona.get(instance.sandboxId);
+				const sandbox = await daytona.get(sandboxId);
 				await sandbox.delete(60);
 			} catch {
 				// Ignore deletion errors
@@ -328,6 +366,15 @@ export const destroy = action({
 		await ctx.runMutation(instanceMutations.updateState, {
 			instanceId: args.instanceId,
 			state: 'unprovisioned'
+		});
+
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.SANDBOX_DESTROYED,
+			properties: {
+				instanceId: args.instanceId,
+				sandboxId
+			}
 		});
 
 		return { destroyed: true };
@@ -357,6 +404,17 @@ async function wakeInstanceInternal(
 		throw new Error('Instance does not have a sandbox to wake');
 	}
 
+	const wakeStartedAt = Date.now();
+
+	await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+		distinctId: instance.clerkId,
+		event: AnalyticsEvents.SANDBOX_WAKE_STARTED,
+		properties: {
+			instanceId,
+			sandboxId: instance.sandboxId
+		}
+	});
+
 	await ctx.runMutation(instanceMutations.updateState, {
 		instanceId,
 		state: 'starting'
@@ -374,6 +432,17 @@ async function wakeInstanceInternal(
 		await ctx.runMutation(instanceMutations.setServerUrl, { instanceId, serverUrl });
 		await ctx.runMutation(instanceMutations.updateState, { instanceId, state: 'running' });
 		await ctx.runMutation(instanceMutations.touchActivity, { instanceId });
+
+		const durationMs = Date.now() - wakeStartedAt;
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.SANDBOX_WOKE,
+			properties: {
+				instanceId,
+				sandboxId: instance.sandboxId,
+				durationMs
+			}
+		});
 
 		return { serverUrl };
 	} catch (error) {
@@ -441,6 +510,17 @@ async function updateInstanceInternal(
 		});
 		await ctx.runMutation(instanceMutations.touchActivity, { instanceId });
 
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.SANDBOX_UPDATED,
+			properties: {
+				instanceId,
+				sandboxId: instance.sandboxId,
+				btcaVersion: versions.btcaVersion,
+				opencodeVersion: versions.opencodeVersion
+			}
+		});
+
 		if (wasRunning) {
 			await sandbox.process.executeCommand('pkill -f "btca serve" || true');
 			const serverUrl = await startBtcaServer(sandbox);
@@ -500,7 +580,7 @@ export const ensureInstanceExists = action({
 
 		const instanceId = await ctx.runMutation(instanceMutations.create, { clerkId });
 
-		void ctx.runAction(instances.actions.provision, { instanceId });
+		await ctx.scheduler.runAfter(0, instances.actions.provision, { instanceId });
 
 		return {
 			instanceId,

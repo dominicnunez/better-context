@@ -11,6 +11,7 @@
 	import type { Id } from '../../../convex/_generated/dataModel';
 	import { getBillingStore } from '$lib/stores/billing.svelte';
 	import { getInstanceStore } from '$lib/stores/instance.svelte';
+	import { trackEvent, ClientAnalyticsEvents } from '$lib/stores/analytics.svelte';
 	import { SUPPORT_URL } from '$lib/billing/plans';
 
 	// Get thread ID from route params - can be 'new' for a fresh thread
@@ -459,6 +460,10 @@
 		if (cancelState === 'none') {
 			cancelState = 'pending';
 		} else {
+			trackEvent(ClientAnalyticsEvents.STREAM_CANCELLED, {
+				threadId,
+				instanceId: auth.instanceId
+			});
 			abortController?.abort();
 		}
 	}

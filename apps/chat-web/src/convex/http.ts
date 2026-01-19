@@ -3,9 +3,10 @@ import { httpRouter } from 'convex/server';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
-import { api } from './_generated/api.js';
+import { api, internal } from './_generated/api.js';
 import type { Id } from './_generated/dataModel';
 import { httpAction, type ActionCtx } from './_generated/server.js';
+import { AnalyticsEvents } from './analyticsEvents';
 import { instances } from './apiHelpers';
 import { streamOps } from './redis.js';
 
@@ -256,6 +257,11 @@ const chatStream = httpAction(async (ctx, request) => {
 	if (!usageCheck?.ok) {
 		const reason = (usageCheck as { reason?: string }).reason;
 		if (reason === 'subscription_required') {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: identity.subject,
+				event: AnalyticsEvents.SUBSCRIPTION_REQUIRED_SHOWN,
+				properties: { instanceId: instance._id }
+			});
 			return corsTextResponse(
 				request,
 				'Subscription required to use btca Chat. Visit /pricing to subscribe.',
@@ -273,6 +279,21 @@ const chatStream = httpAction(async (ctx, request) => {
 		inputTokens?: number;
 		sandboxUsageHours?: number;
 	};
+
+	const streamStartedAt = Date.now();
+
+	await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+		distinctId: identity.subject,
+		event: AnalyticsEvents.STREAM_STARTED,
+		properties: {
+			instanceId: instance._id,
+			threadId: resolvedThreadId,
+			resourceCount: updatedResources.length,
+			resources: updatedResources,
+			inputTokens: usageData.inputTokens ?? 0,
+			sandboxUsageHours: usageData.sandboxUsageHours ?? 0
+		}
+	});
 
 	await ctx.runMutation(api.messages.addUserMessage, {
 		threadId: resolvedThreadId,
@@ -483,10 +504,46 @@ const chatStream = httpAction(async (ctx, request) => {
 				await streamOps.setStatus(sessionId, 'done');
 				await ctx.runMutation(api.streamSessions.complete, { sessionId });
 
+				const streamDurationMs = Date.now() - streamStartedAt;
+				const toolsUsed = chunkOrder
+					.map((id) => chunksById.get(id))
+					.filter((c): c is BtcaChunk => c?.type === 'tool')
+					.map((c) => (c as { toolName: string }).toolName);
+
+				await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+					distinctId: identity.subject,
+					event: AnalyticsEvents.STREAM_COMPLETED,
+					properties: {
+						instanceId: instance._id,
+						threadId: resolvedThreadId,
+						durationMs: streamDurationMs,
+						outputChars: outputCharCount,
+						reasoningChars: reasoningCharCount,
+						toolsUsed,
+						toolCount: toolsUsed.length,
+						resourcesUsed: updatedResources,
+						resourceCount: updatedResources.length,
+						inputTokens: usageData.inputTokens ?? 0,
+						sandboxUsageHours: usageData.sandboxUsageHours ?? 0
+					}
+				});
+
 				sendEvent({ type: 'done' });
 				controller.close();
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+				const streamDurationMs = Date.now() - streamStartedAt;
+
+				await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+					distinctId: identity.subject,
+					event: AnalyticsEvents.STREAM_FAILED,
+					properties: {
+						instanceId: instance._id,
+						threadId: resolvedThreadId,
+						error: errorMessage,
+						durationMs: streamDurationMs
+					}
+				});
 
 				await streamOps.publishError(sessionId, errorMessage);
 				await streamOps.setStatus(sessionId, 'error', errorMessage);
@@ -524,12 +581,22 @@ const clerkWebhook = httpAction(async (ctx, request) => {
 	const payload = await request.text();
 	const headers = getSvixHeaders(request);
 	if (!headers) {
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: 'webhook_system',
+			event: AnalyticsEvents.WEBHOOK_VERIFICATION_FAILED,
+			properties: { webhookType: 'clerk', reason: 'missing_svix_headers' }
+		});
 		const response = jsonResponse({ error: 'Missing Svix headers' }, { status: 400 });
 		return withCors(request, response);
 	}
 
 	const verifiedPayload = await verifySvixSignature(payload, headers, secret);
 	if (!verifiedPayload) {
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: 'webhook_system',
+			event: AnalyticsEvents.WEBHOOK_VERIFICATION_FAILED,
+			properties: { webhookType: 'clerk', reason: 'invalid_signature' }
+		});
 		const response = jsonResponse({ error: 'Invalid webhook signature' }, { status: 400 });
 		return withCors(request, response);
 	}
@@ -545,6 +612,11 @@ const clerkWebhook = httpAction(async (ctx, request) => {
 
 	if (parsedPayload.data.type === 'user.created') {
 		const clerkId = parsedPayload.data.data.id;
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: clerkId,
+			event: AnalyticsEvents.USER_SIGNED_UP,
+			properties: { timestamp: Date.now() }
+		});
 		if (ctx.runAction) {
 			await ctx.runAction(instanceActions.ensureInstanceExists, { clerkId });
 		}
@@ -819,11 +891,21 @@ const daytonaWebhook = httpAction(async (ctx, request) => {
 	const payload = await request.text();
 	const headers = getSvixHeaders(request);
 	if (!headers) {
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: 'webhook_system',
+			event: AnalyticsEvents.WEBHOOK_VERIFICATION_FAILED,
+			properties: { webhookType: 'daytona', reason: 'missing_svix_headers' }
+		});
 		return jsonResponse({ error: 'Missing Svix headers' }, { status: 400 });
 	}
 
 	const verifiedPayload = await verifySvixSignature(payload, headers, secret);
 	if (!verifiedPayload) {
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: 'webhook_system',
+			event: AnalyticsEvents.WEBHOOK_VERIFICATION_FAILED,
+			properties: { webhookType: 'daytona', reason: 'invalid_signature' }
+		});
 		return jsonResponse({ error: 'Invalid webhook signature' }, { status: 400 });
 	}
 

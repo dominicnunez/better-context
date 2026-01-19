@@ -28,6 +28,13 @@
 	} from '$lib/stores/auth.svelte';
 	import { setBillingStore } from '$lib/stores/billing.svelte';
 	import { setInstanceStore, getInstanceStore } from '$lib/stores/instance.svelte';
+	import {
+		initAnalytics,
+		identifyUser,
+		resetUser,
+		trackEvent,
+		ClientAnalyticsEvents
+	} from '$lib/stores/analytics.svelte';
 	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 
 	let { children } = $props();
@@ -62,6 +69,8 @@
 	};
 
 	onMount(async () => {
+		initAnalytics();
+
 		clerkInitPromise = (async () => {
 			try {
 				const clerk = await initializeClerk();
@@ -70,6 +79,7 @@
 				clerk.addListener((resources) => {
 					if (!resources.user) {
 						setInstanceId(null);
+						resetUser();
 					}
 				});
 			} catch (error) {
@@ -85,6 +95,22 @@
 	$effect(() => {
 		const instance = instanceStore.instance;
 		untrack(() => setInstanceId(instance?._id ?? null));
+	});
+
+	$effect(() => {
+		const user = auth.user;
+		const clerkId = auth.clerk?.user?.id;
+		if (user && clerkId) {
+			untrack(() => {
+				identifyUser(clerkId, {
+					email: user.primaryEmailAddress?.emailAddress,
+					name: user.fullName
+				});
+				trackEvent(ClientAnalyticsEvents.USER_SIGNED_IN, {
+					hasEmail: !!user.primaryEmailAddress?.emailAddress
+				});
+			});
+		}
 	});
 
 	$effect(() => {
@@ -106,6 +132,8 @@
 
 	function handleSignOut() {
 		showUserMenu = false;
+		trackEvent(ClientAnalyticsEvents.USER_SIGNED_OUT);
+		resetUser();
 		signOut();
 	}
 

@@ -1,6 +1,8 @@
 import { v } from 'convex/values';
 
+import { internal } from '../_generated/api';
 import { mutation } from '../_generated/server';
+import { AnalyticsEvents } from '../analyticsEvents';
 import { instances } from '../apiHelpers';
 
 const instanceStateValidator = v.union(
@@ -26,11 +28,19 @@ export const create = mutation({
 			return existing._id;
 		}
 
-		return await ctx.db.insert('instances', {
+		const instanceId = await ctx.db.insert('instances', {
 			clerkId: args.clerkId,
 			state: 'unprovisioned',
 			createdAt: Date.now()
 		});
+
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: args.clerkId,
+			event: AnalyticsEvents.INSTANCE_CREATED,
+			properties: { instanceId }
+		});
+
+		return instanceId;
 	}
 });
 
@@ -98,10 +108,25 @@ export const setError = mutation({
 		errorMessage: v.string()
 	},
 	handler: async (ctx, args) => {
+		const instance = await ctx.db.get(args.instanceId);
+		const previousState = instance?.state;
+
 		await ctx.db.patch(args.instanceId, {
 			state: 'error',
 			errorMessage: args.errorMessage
 		});
+
+		if (instance) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.INSTANCE_ERROR,
+				properties: {
+					instanceId: args.instanceId,
+					errorMessage: args.errorMessage,
+					previousState
+				}
+			});
+		}
 	}
 });
 
@@ -226,9 +251,21 @@ export const handleSandboxStopped = mutation({
 			return { updated: false, reason: 'already_stopped' };
 		}
 
+		const wasAutoStopped = instance.state === 'running';
+
 		await ctx.db.patch(instance._id, {
 			state: 'stopped',
 			serverUrl: ''
+		});
+
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.SANDBOX_STOPPED,
+			properties: {
+				instanceId: instance._id,
+				sandboxId: args.sandboxId,
+				wasAutoStopped
+			}
 		});
 
 		return { updated: true, instanceId: instance._id };

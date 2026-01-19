@@ -1,6 +1,9 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
+import { internal } from './_generated/api';
+import { AnalyticsEvents } from './analyticsEvents';
+
 export const list = query({
 	args: { instanceId: v.id('instances') },
 	handler: async (ctx, args) => {
@@ -44,18 +47,36 @@ export const create = mutation({
 		title: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		return await ctx.db.insert('threads', {
+		const instance = await ctx.db.get(args.instanceId);
+
+		const threadId = await ctx.db.insert('threads', {
 			instanceId: args.instanceId,
 			title: args.title,
 			createdAt: Date.now(),
 			lastActivityAt: Date.now()
 		});
+
+		if (instance) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.THREAD_CREATED,
+				properties: {
+					instanceId: args.instanceId,
+					threadId
+				}
+			});
+		}
+
+		return threadId;
 	}
 });
 
 export const remove = mutation({
 	args: { threadId: v.id('threads') },
 	handler: async (ctx, args) => {
+		const thread = await ctx.db.get(args.threadId);
+		const instance = thread ? await ctx.db.get(thread.instanceId) : null;
+
 		const messages = await ctx.db
 			.query('messages')
 			.withIndex('by_thread', (q) => q.eq('threadId', args.threadId))
@@ -75,12 +96,27 @@ export const remove = mutation({
 		}
 
 		await ctx.db.delete(args.threadId);
+
+		if (instance) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.THREAD_DELETED,
+				properties: {
+					instanceId: thread?.instanceId,
+					threadId: args.threadId,
+					messageCount: messages.length
+				}
+			});
+		}
 	}
 });
 
 export const clearMessages = mutation({
 	args: { threadId: v.id('threads') },
 	handler: async (ctx, args) => {
+		const thread = await ctx.db.get(args.threadId);
+		const instance = thread ? await ctx.db.get(thread.instanceId) : null;
+
 		const messages = await ctx.db
 			.query('messages')
 			.withIndex('by_thread', (q) => q.eq('threadId', args.threadId))
@@ -88,6 +124,18 @@ export const clearMessages = mutation({
 
 		for (const message of messages) {
 			await ctx.db.delete(message._id);
+		}
+
+		if (instance) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.THREAD_CLEARED,
+				properties: {
+					instanceId: thread?.instanceId,
+					threadId: args.threadId,
+					messageCount: messages.length
+				}
+			});
 		}
 	}
 });

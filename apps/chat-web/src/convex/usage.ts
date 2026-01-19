@@ -1,8 +1,10 @@
 import { Autumn } from 'autumn-js';
 import { v } from 'convex/values';
 
-import { instances } from './apiHelpers.js';
+import { internal } from './_generated/api.js';
 import { action } from './_generated/server.js';
+import { AnalyticsEvents } from './analyticsEvents';
+import { instances } from './apiHelpers.js';
 
 type FeatureMetrics = {
 	usage: number;
@@ -267,6 +269,25 @@ export const ensureUsageAvailable = action({
 			hasEnough(tokensOut.balance, requiredTokensOut) &&
 			hasEnough(sandboxHours.balance, requiredSandboxHours);
 
+		if (!ok) {
+			const limitTypes: string[] = [];
+			if (!hasEnough(tokensIn.balance, requiredTokensIn)) limitTypes.push('tokensIn');
+			if (!hasEnough(tokensOut.balance, requiredTokensOut)) limitTypes.push('tokensOut');
+			if (!hasEnough(sandboxHours.balance, requiredSandboxHours)) limitTypes.push('sandboxHours');
+
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.USAGE_LIMIT_REACHED,
+				properties: {
+					instanceId: args.instanceId,
+					limitTypes,
+					tokensInBalance: tokensIn.balance,
+					tokensOutBalance: tokensOut.balance,
+					sandboxHoursBalance: sandboxHours.balance
+				}
+			});
+		}
+
 		return {
 			ok,
 			reason: ok ? null : 'limit_reached',
@@ -414,6 +435,15 @@ export const createCheckoutSession = action({
 			throw new Error('Instance not found');
 		}
 
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.CHECKOUT_STARTED,
+			properties: {
+				instanceId: args.instanceId,
+				plan: 'btca_pro'
+			}
+		});
+
 		const autumnCustomer = await getOrCreateCustomer({
 			clerkId: instance.clerkId
 		});
@@ -431,6 +461,15 @@ export const createCheckoutSession = action({
 			throw new Error(payload.error.message ?? 'Failed to create checkout session');
 		}
 		if (payload.data?.url) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.SUBSCRIPTION_CREATED,
+				properties: {
+					instanceId: args.instanceId,
+					plan: 'btca_pro',
+					wasExistingCustomer: true
+				}
+			});
 			return { url: payload.data.url };
 		}
 
@@ -459,6 +498,14 @@ export const createBillingPortalSession = action({
 		if (!instance) {
 			throw new Error('Instance not found');
 		}
+
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.BILLING_PORTAL_OPENED,
+			properties: {
+				instanceId: args.instanceId
+			}
+		});
 
 		const autumnCustomer = await getOrCreateCustomer({
 			clerkId: instance.clerkId

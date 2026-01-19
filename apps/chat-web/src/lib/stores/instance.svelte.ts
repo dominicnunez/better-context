@@ -2,6 +2,7 @@ import { createContext } from 'svelte';
 import { useQuery, useConvexClient } from 'convex-svelte';
 import { instances } from '../../convex/apiHelpers';
 import type { Doc, Id } from '../../convex/_generated/dataModel';
+import { trackEvent, ClientAnalyticsEvents } from './analytics.svelte';
 
 type InstanceStatus = {
 	instance: Doc<'instances'>;
@@ -102,6 +103,9 @@ class InstanceStore {
 
 	async wake(): Promise<InstanceActionResponse> {
 		this._error = null;
+		trackEvent(ClientAnalyticsEvents.INSTANCE_WAKE_REQUESTED, {
+			instanceId: this.instance?._id
+		});
 		try {
 			const result = await this._client.action(instances.actions.wakeMyInstance, {});
 			return result as InstanceActionResponse;
@@ -113,6 +117,9 @@ class InstanceStore {
 
 	async stop(): Promise<InstanceActionResponse> {
 		this._error = null;
+		trackEvent(ClientAnalyticsEvents.INSTANCE_STOP_REQUESTED, {
+			instanceId: this.instance?._id
+		});
 		try {
 			const result = await this._client.action(instances.actions.stopMyInstance, {});
 			return result as InstanceActionResponse;
@@ -124,6 +131,9 @@ class InstanceStore {
 
 	async update(): Promise<InstanceActionResponse> {
 		this._error = null;
+		trackEvent(ClientAnalyticsEvents.INSTANCE_UPDATE_REQUESTED, {
+			instanceId: this.instance?._id
+		});
 		try {
 			const result = await this._client.action(instances.actions.updateMyInstance, {});
 			return result as InstanceActionResponse;

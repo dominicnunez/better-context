@@ -1,8 +1,9 @@
 import {
 	createContext,
 	createSignal,
+	createResource,
+	createEffect,
 	useContext,
-	onMount,
 	type Accessor,
 	type Component,
 	type ParentProps
@@ -29,26 +30,24 @@ export const useConfigContext = () => {
 	return context;
 };
 
+const fetchInitialConfig = async () => {
+	const [reposList, modelConfig] = await Promise.all([services.getRepos(), services.getModel()]);
+	return { repos: reposList, provider: modelConfig.provider, model: modelConfig.model };
+};
+
 export const ConfigProvider: Component<ParentProps> = (props) => {
+	const [initialConfig] = createResource(fetchInitialConfig);
+
 	const [selectedModel, setSelectedModel] = createSignal('');
 	const [selectedProvider, setSelectedProvider] = createSignal('');
 	const [repos, setRepos] = createSignal<Repo[]>([]);
-	const [loading, setLoading] = createSignal(true);
 
-	onMount(async () => {
-		try {
-			const [reposList, modelConfig] = await Promise.all([
-				services.getRepos(),
-				services.getModel()
-			]);
-
-			setRepos(reposList);
-			setSelectedProvider(modelConfig.provider);
-			setSelectedModel(modelConfig.model);
-		} catch (error) {
-			console.error('Failed to load config:', error);
-		} finally {
-			setLoading(false);
+	createEffect(() => {
+		const config = initialConfig();
+		if (config) {
+			setSelectedModel(config.model);
+			setSelectedProvider(config.provider);
+			setRepos(config.repos);
 		}
 	});
 
@@ -60,7 +59,7 @@ export const ConfigProvider: Component<ParentProps> = (props) => {
 		repos,
 		addRepo: (repo) => setRepos((prev) => [...prev, repo]),
 		removeRepo: (name) => setRepos((prev) => prev.filter((r) => r.name !== name)),
-		loading
+		loading: () => initialConfig.loading
 	};
 
 	return <ConfigContext.Provider value={state}>{props.children}</ConfigContext.Provider>;

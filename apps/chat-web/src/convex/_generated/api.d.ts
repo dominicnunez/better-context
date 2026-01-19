@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as analytics from "../analytics.js";
+import type * as analyticsEvents from "../analyticsEvents.js";
 import type * as apiHelpers from "../apiHelpers.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as crons from "../crons.js";
@@ -35,6 +37,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  analytics: typeof analytics;
+  analyticsEvents: typeof analyticsEvents;
   apiHelpers: typeof apiHelpers;
   apiKeys: typeof apiKeys;
   crons: typeof crons;

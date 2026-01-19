@@ -1,6 +1,9 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
+import { internal } from './_generated/api';
+import { AnalyticsEvents } from './analyticsEvents';
+
 export const listGlobal = query({
 	args: {},
 	handler: async (ctx) => {
@@ -66,7 +69,9 @@ export const addCustomResource = mutation({
 		specialNotes: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		return await ctx.db.insert('userResources', {
+		const instance = await ctx.db.get(args.instanceId);
+
+		const resourceId = await ctx.db.insert('userResources', {
 			instanceId: args.instanceId,
 			name: args.name,
 			type: 'git',
@@ -76,12 +81,45 @@ export const addCustomResource = mutation({
 			specialNotes: args.specialNotes,
 			createdAt: Date.now()
 		});
+
+		if (instance) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.RESOURCE_ADDED,
+				properties: {
+					instanceId: args.instanceId,
+					resourceId,
+					resourceName: args.name,
+					resourceUrl: args.url,
+					hasBranch: args.branch !== 'main',
+					hasSearchPath: !!args.searchPath,
+					hasNotes: !!args.specialNotes
+				}
+			});
+		}
+
+		return resourceId;
 	}
 });
 
 export const removeCustomResource = mutation({
 	args: { resourceId: v.id('userResources') },
 	handler: async (ctx, args) => {
+		const resource = await ctx.db.get(args.resourceId);
+		const instance = resource ? await ctx.db.get(resource.instanceId) : null;
+
 		await ctx.db.delete(args.resourceId);
+
+		if (instance && resource) {
+			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+				distinctId: instance.clerkId,
+				event: AnalyticsEvents.RESOURCE_REMOVED,
+				properties: {
+					instanceId: resource.instanceId,
+					resourceId: args.resourceId,
+					resourceName: resource.name
+				}
+			});
+		}
 	}
 });
