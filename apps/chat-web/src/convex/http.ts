@@ -53,11 +53,13 @@ const clerkWebhookSchema = z.object({
 });
 
 const daytonaWebhookSchema = z.object({
-	type: z.string(),
-	data: z.object({
-		sandboxId: z.string().min(1),
-		state: z.string().optional()
-	})
+	event: z.string(),
+	id: z.string().min(1),
+	newState: z.string().optional(),
+	oldState: z.string().optional(),
+	organizationId: z.string().optional(),
+	timestamp: z.string().optional(),
+	updatedAt: z.string().optional()
 });
 
 type MessageLike = {
@@ -553,20 +555,18 @@ const daytonaWebhook = httpAction(async (ctx, request) => {
 		return jsonResponse({ error: 'Missing Daytona webhook secret' }, { status: 500 });
 	}
 
-	const authHeader = request.headers.get('Authorization');
-	const providedSecret = authHeader?.replace('Bearer ', '');
-	if (providedSecret !== secret) {
-		return jsonResponse({ error: 'Invalid webhook secret' }, { status: 401 });
+	const payload = await request.text();
+	const headers = getSvixHeaders(request);
+	if (!headers) {
+		return jsonResponse({ error: 'Missing Svix headers' }, { status: 400 });
 	}
 
-	let rawBody: unknown;
-	try {
-		rawBody = await request.json();
-	} catch {
-		return jsonResponse({ error: 'Invalid JSON body' }, { status: 400 });
+	const verifiedPayload = await verifySvixSignature(payload, headers, secret);
+	if (!verifiedPayload) {
+		return jsonResponse({ error: 'Invalid webhook signature' }, { status: 400 });
 	}
 
-	const parseResult = daytonaWebhookSchema.safeParse(rawBody);
+	const parseResult = daytonaWebhookSchema.safeParse(verifiedPayload);
 	if (!parseResult.success) {
 		const issues = parseResult.error.issues
 			.map((issue) => `${issue.path.join('.')}: ${issue.message}`)
@@ -574,16 +574,12 @@ const daytonaWebhook = httpAction(async (ctx, request) => {
 		return jsonResponse({ error: `Invalid webhook payload: ${issues}` }, { status: 400 });
 	}
 
-	const { type, data } = parseResult.data;
+	const { event, id: sandboxId, newState } = parseResult.data;
 
-	if (type === 'sandbox.stopped') {
-		await ctx.runMutation(instanceMutations.handleSandboxStopped, {
-			sandboxId: data.sandboxId
-		});
-	} else if (type === 'sandbox.started') {
-		await ctx.runMutation(instanceMutations.handleSandboxStarted, {
-			sandboxId: data.sandboxId
-		});
+	if (event === 'sandbox.state.updated' && newState === 'stopped') {
+		await ctx.runMutation(instanceMutations.handleSandboxStopped, { sandboxId });
+	} else if (event === 'sandbox.state.updated' && newState === 'started') {
+		await ctx.runMutation(instanceMutations.handleSandboxStarted, { sandboxId });
 	}
 
 	return jsonResponse({ received: true });
