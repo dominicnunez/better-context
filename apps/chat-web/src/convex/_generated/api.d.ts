@@ -8,11 +8,26 @@
  * @module
  */
 
+import type * as analytics from "../analytics.js";
+import type * as analyticsEvents from "../analyticsEvents.js";
+import type * as apiHelpers from "../apiHelpers.js";
 import type * as apiKeys from "../apiKeys.js";
+import type * as crons from "../crons.js";
+import type * as http from "../http.js";
+import type * as instances_actions from "../instances/actions.js";
+import type * as instances_mutations from "../instances/mutations.js";
+import type * as instances_queries from "../instances/queries.js";
 import type * as messages from "../messages.js";
+import type * as redis from "../redis.js";
 import type * as resources from "../resources.js";
+import type * as scheduled_queries from "../scheduled/queries.js";
+import type * as scheduled_updates from "../scheduled/updates.js";
+import type * as scheduled_versionCheck from "../scheduled/versionCheck.js";
 import type * as seed from "../seed.js";
+import type * as streamActions from "../streamActions.js";
+import type * as streamSessions from "../streamSessions.js";
 import type * as threads from "../threads.js";
+import type * as usage from "../usage.js";
 import type * as users from "../users.js";
 
 import type {
@@ -22,11 +37,26 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  analytics: typeof analytics;
+  analyticsEvents: typeof analyticsEvents;
+  apiHelpers: typeof apiHelpers;
   apiKeys: typeof apiKeys;
+  crons: typeof crons;
+  http: typeof http;
+  "instances/actions": typeof instances_actions;
+  "instances/mutations": typeof instances_mutations;
+  "instances/queries": typeof instances_queries;
   messages: typeof messages;
+  redis: typeof redis;
   resources: typeof resources;
+  "scheduled/queries": typeof scheduled_queries;
+  "scheduled/updates": typeof scheduled_updates;
+  "scheduled/versionCheck": typeof scheduled_versionCheck;
   seed: typeof seed;
+  streamActions: typeof streamActions;
+  streamSessions: typeof streamSessions;
   threads: typeof threads;
+  usage: typeof usage;
   users: typeof users;
 }>;
 
