@@ -260,6 +260,23 @@
 		}, 2000);
 	}
 
+	async function copyFullThread() {
+		const parts: string[] = [];
+		for (const message of messages) {
+			if (message.role === 'user') {
+				parts.push(`**User:** ${stripHistory(message.content)}`);
+			} else if (message.role === 'assistant') {
+				const text = getAssistantTextContent(message.content);
+				parts.push(`**Assistant:** ${stripHistory(text)}`);
+			}
+		}
+		await navigator.clipboard.writeText(parts.join('\n\n'));
+		copiedId = 'full-thread';
+		setTimeout(() => {
+			copiedId = null;
+		}, 2000);
+	}
+
 	function sortChunks(chunks: BtcaChunk[]): BtcaChunk[] {
 		const reasoning: BtcaChunk[] = [];
 		const tools: BtcaChunk[] = [];
@@ -340,7 +357,7 @@
 								{#if copiedId === message.id}
 									<Check size={12} /> Copied
 								{:else}
-									<Copy size={12} /> Copy
+									<Copy size={12} /> Copy message
 								{/if}
 							</button>
 						</div>
@@ -423,6 +440,19 @@
 							{/if}
 						{/each}
 					</div>
+				</div>
+			{/if}
+
+			<!-- Copy full thread button -->
+			{#if messages.length > 0}
+				<div class="flex justify-center pt-4">
+					<button type="button" class="copy-answer-btn" onclick={copyFullThread}>
+						{#if copiedId === 'full-thread'}
+							<Check size={12} /> Copied
+						{:else}
+							<Copy size={12} /> Copy full thread
+						{/if}
+					</button>
 				</div>
 			{/if}
 		</div>
