@@ -45,12 +45,12 @@ mcpServer.tool(
 		}
 
 		const convex = getConvexClient();
-		const resources = await convex.query(api.resources.listAvailable, {
+		const { custom } = await convex.query(api.resources.listAvailable, {
 			instanceId: ctx.instanceId
 		});
 
 		return {
-			content: [{ type: 'text' as const, text: JSON.stringify(resources, null, 2) }]
+			content: [{ type: 'text' as const, text: JSON.stringify(custom, null, 2) }]
 		};
 	}
 );
