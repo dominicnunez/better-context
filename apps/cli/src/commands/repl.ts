@@ -226,7 +226,7 @@ Examples:
 			}
 
 			// Clean the question
-			const question = cleanInput(input, validNewResources);
+			const question = cleanInput(input, sessionResources);
 			if (!question) {
 				console.log('Please enter a question after the @mention.');
 				continue;
