@@ -113,7 +113,7 @@ async function getResourceConfigs(
 	ctx: ActionCtx,
 	instanceId: Id<'instances'>
 ): Promise<ResourceConfig[]> {
-	const resources = await ctx.runQuery(api.resources.listAvailable, {
+	const resources = await ctx.runQuery(api.resources.listAvailableInternal, {
 		instanceId
 	});
 	const merged = new Map<string, ResourceConfig>();
@@ -134,7 +134,7 @@ async function requireInstance(
 	ctx: ActionCtx,
 	instanceId: Id<'instances'>
 ): Promise<Doc<'instances'>> {
-	const instance = await ctx.runQuery(instanceQueries.get, { id: instanceId });
+	const instance = await ctx.runQuery(instances.internalQueries.getInternal, { id: instanceId });
 	if (!instance) {
 		throw new Error('Instance not found');
 	}

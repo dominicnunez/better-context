@@ -46,9 +46,7 @@
 
 	const routeId = $derived((page.params as { id?: string }).id);
 	const currentThreadId = $derived(routeId && routeId !== 'new' ? routeId : null);
-	const threadsQuery = $derived(
-		auth.instanceId ? useQuery(api.threads.list, { instanceId: auth.instanceId }) : null
-	);
+	const threadsQuery = $derived(auth.instanceId ? useQuery(api.threads.list, {}) : null);
 	const threads = $derived(threadsQuery?.data ?? []);
 	const threadsLoading = $derived(threadsQuery?.isLoading ?? false);
 

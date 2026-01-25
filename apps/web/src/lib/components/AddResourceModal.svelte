@@ -166,7 +166,6 @@
 		isSubmitting = true;
 		try {
 			await client.mutation(api.resources.addCustomResource, {
-				instanceId: auth.instanceId,
 				name,
 				url: parsed.url,
 				branch: branchName.trim() || 'main'

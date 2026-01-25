@@ -5,7 +5,11 @@ import { mutation, query } from './_generated/server';
 import { internal } from './_generated/api';
 import { AnalyticsEvents } from './analyticsEvents';
 import { instances } from './apiHelpers';
+import { getAuthenticatedInstance, requireUserResourceOwnership } from './authHelpers';
 
+/**
+ * List global resources (public, no auth required)
+ */
 export const listGlobal = query({
 	args: {},
 	handler: async (ctx) => {
@@ -14,17 +18,65 @@ export const listGlobal = query({
 	}
 });
 
+/**
+ * List user resources for the authenticated user's instance
+ */
 export const listUserResources = query({
-	args: { instanceId: v.id('instances') },
-	handler: async (ctx, args) => {
+	args: {},
+	handler: async (ctx) => {
+		const instance = await getAuthenticatedInstance(ctx);
+
 		return await ctx.db
 			.query('userResources')
-			.withIndex('by_instance', (q) => q.eq('instanceId', args.instanceId))
+			.withIndex('by_instance', (q) => q.eq('instanceId', instance._id))
 			.collect();
 	}
 });
 
+/**
+ * List all available resources (global + custom) for the authenticated user's instance
+ */
 export const listAvailable = query({
+	args: {},
+	handler: async (ctx) => {
+		const instance = await getAuthenticatedInstance(ctx);
+
+		const userResources = await ctx.db
+			.query('userResources')
+			.withIndex('by_instance', (q) => q.eq('instanceId', instance._id))
+			.collect();
+
+		const global = GLOBAL_RESOURCES.map((resource) => ({
+			name: resource.name,
+			displayName: resource.displayName,
+			type: resource.type,
+			url: resource.url,
+			branch: resource.branch,
+			searchPath: resource.searchPath ?? resource.searchPaths?.[0],
+			specialNotes: resource.specialNotes,
+			isGlobal: true as const
+		}));
+
+		const custom = userResources.map((r) => ({
+			name: r.name,
+			displayName: r.name,
+			type: r.type,
+			url: r.url,
+			branch: r.branch,
+			searchPath: r.searchPath,
+			specialNotes: r.specialNotes,
+			isGlobal: false as const
+		}));
+
+		return { global, custom };
+	}
+});
+
+/**
+ * Internal version that accepts instanceId (for use by internal actions only)
+ * This is needed for server-side operations that run without user auth context
+ */
+export const listAvailableInternal = query({
 	args: { instanceId: v.id('instances') },
 	handler: async (ctx, args) => {
 		const userResources = await ctx.db
@@ -58,9 +110,11 @@ export const listAvailable = query({
 	}
 });
 
+/**
+ * Add a custom resource to the authenticated user's instance
+ */
 export const addCustomResource = mutation({
 	args: {
-		instanceId: v.id('instances'),
 		name: v.string(),
 		url: v.string(),
 		branch: v.string(),
@@ -68,10 +122,10 @@ export const addCustomResource = mutation({
 		specialNotes: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		const instance = await ctx.db.get(args.instanceId);
+		const instance = await getAuthenticatedInstance(ctx);
 
 		const resourceId = await ctx.db.insert('userResources', {
-			instanceId: args.instanceId,
+			instanceId: instance._id,
 			name: args.name,
 			type: 'git',
 			url: args.url,
@@ -82,53 +136,49 @@ export const addCustomResource = mutation({
 		});
 
 		await ctx.scheduler.runAfter(0, instances.internalActions.syncResources, {
-			instanceId: args.instanceId
+			instanceId: instance._id
 		});
 
-		if (instance) {
-			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
-				distinctId: instance.clerkId,
-				event: AnalyticsEvents.RESOURCE_ADDED,
-				properties: {
-					instanceId: args.instanceId,
-					resourceId,
-					resourceName: args.name,
-					resourceUrl: args.url,
-					hasBranch: args.branch !== 'main',
-					hasSearchPath: !!args.searchPath,
-					hasNotes: !!args.specialNotes
-				}
-			});
-		}
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.RESOURCE_ADDED,
+			properties: {
+				instanceId: instance._id,
+				resourceId,
+				resourceName: args.name,
+				resourceUrl: args.url,
+				hasBranch: args.branch !== 'main',
+				hasSearchPath: !!args.searchPath,
+				hasNotes: !!args.specialNotes
+			}
+		});
 
 		return resourceId;
 	}
 });
 
+/**
+ * Remove a custom resource (requires ownership)
+ */
 export const removeCustomResource = mutation({
 	args: { resourceId: v.id('userResources') },
 	handler: async (ctx, args) => {
-		const resource = await ctx.db.get(args.resourceId);
-		const instance = resource ? await ctx.db.get(resource.instanceId) : null;
+		const { resource, instance } = await requireUserResourceOwnership(ctx, args.resourceId);
 
 		await ctx.db.delete(args.resourceId);
 
-		if (resource) {
-			await ctx.scheduler.runAfter(0, instances.internalActions.syncResources, {
-				instanceId: resource.instanceId
-			});
-		}
+		await ctx.scheduler.runAfter(0, instances.internalActions.syncResources, {
+			instanceId: resource.instanceId
+		});
 
-		if (instance && resource) {
-			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
-				distinctId: instance.clerkId,
-				event: AnalyticsEvents.RESOURCE_REMOVED,
-				properties: {
-					instanceId: resource.instanceId,
-					resourceId: args.resourceId,
-					resourceName: resource.name
-				}
-			});
-		}
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.RESOURCE_REMOVED,
+			properties: {
+				instanceId: resource.instanceId,
+				resourceId: args.resourceId,
+				resourceName: resource.name
+			}
+		});
 	}
 });

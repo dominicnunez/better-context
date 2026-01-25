@@ -11,9 +11,7 @@
 	const client = useConvexClient();
 
 	const userResourcesQuery = $derived(
-		auth.instanceId
-			? useQuery(api.resources.listUserResources, { instanceId: auth.instanceId })
-			: null
+		auth.instanceId ? useQuery(api.resources.listUserResources, {}) : null
 	);
 
 	// Quick add state
@@ -162,9 +160,7 @@
 
 		try {
 			await client.mutation(api.resources.addCustomResource, {
-				instanceId: auth.instanceId,
 				name: formName.trim(),
-
 				url: formUrl.trim(),
 				branch: formBranch.trim() || 'main',
 				searchPath: formSearchPath.trim() || undefined,
@@ -205,7 +201,6 @@
 		addingGlobal = resource.name;
 		try {
 			await client.mutation(api.resources.addCustomResource, {
-				instanceId: auth.instanceId,
 				name: resource.name,
 				url: resource.url,
 				branch: resource.branch,

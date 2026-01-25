@@ -12,6 +12,7 @@ import type * as analytics from "../analytics.js";
 import type * as analyticsEvents from "../analyticsEvents.js";
 import type * as apiHelpers from "../apiHelpers.js";
 import type * as apiKeys from "../apiKeys.js";
+import type * as authHelpers from "../authHelpers.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as instances_actions from "../instances/actions.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   analyticsEvents: typeof analyticsEvents;
   apiHelpers: typeof apiHelpers;
   apiKeys: typeof apiKeys;
+  authHelpers: typeof authHelpers;
   crons: typeof crons;
   http: typeof http;
   "instances/actions": typeof instances_actions;

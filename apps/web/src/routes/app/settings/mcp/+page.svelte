@@ -16,9 +16,7 @@
 
 	const instanceId = $derived(auth.instanceId);
 
-	const apiKeysQuery = $derived(
-		instanceId ? useQuery(api.apiKeys.listByUser, { userId: instanceId }) : null
-	);
+	const apiKeysQuery = $derived(instanceId ? useQuery(api.apiKeys.list, {}) : null);
 	const apiKeys = $derived(apiKeysQuery?.data ?? []);
 
 	let newKeyName = $state('');
@@ -110,7 +108,6 @@ Use the Better Context MCP for documentation questions.
 		isCreating = true;
 		try {
 			const result = await client.mutation(api.apiKeys.create, {
-				userId: instanceId,
 				name: newKeyName.trim()
 			});
 			newlyCreatedKey = result.key;

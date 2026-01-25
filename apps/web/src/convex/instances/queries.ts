@@ -2,10 +2,40 @@ import { v } from 'convex/values';
 
 import { internalQuery, query } from '../_generated/server';
 
-export const get = query({
+/**
+ * Internal query to get instance by ID (for use by other internal functions)
+ * This should only be called from trusted server-side code
+ */
+export const getInternal = internalQuery({
 	args: { id: v.id('instances') },
 	handler: async (ctx, args) => {
 		return await ctx.db.get(args.id);
+	}
+});
+
+/**
+ * Get instance by ID (requires ownership verification)
+ * Public queries should use getByClerkId instead to get the authenticated user's instance
+ */
+export const get = query({
+	args: { id: v.id('instances') },
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error('Unauthorized: Authentication required');
+		}
+
+		const instance = await ctx.db.get(args.id);
+		if (!instance) {
+			return null;
+		}
+
+		// Verify the caller owns this instance
+		if (instance.clerkId !== identity.subject) {
+			throw new Error('Unauthorized: Access denied');
+		}
+
+		return instance;
 	}
 });
 
@@ -19,6 +49,9 @@ export const getBySandboxId = internalQuery({
 	}
 });
 
+/**
+ * Get the authenticated user's instance by their Clerk ID
+ */
 export const getByClerkId = query({
 	args: {},
 	handler: async (ctx) => {
@@ -34,6 +67,9 @@ export const getByClerkId = query({
 	}
 });
 
+/**
+ * Get instance status for the authenticated user
+ */
 export const getStatus = query({
 	args: {},
 	handler: async (ctx) => {

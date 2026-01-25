@@ -4,7 +4,7 @@ import { v } from 'convex/values';
 import { internal } from './_generated/api.js';
 import { action } from './_generated/server.js';
 import { AnalyticsEvents } from './analyticsEvents.js';
-import { instances } from './apiHelpers.js';
+import { requireInstanceOwnershipAction } from './authHelpers.js';
 
 type FeatureMetrics = {
 	usage: number;
@@ -262,10 +262,7 @@ export const ensureUsageAvailable = action({
 		resources: v.array(v.string())
 	},
 	handler: async (ctx, args): Promise<UsageCheckResult> => {
-		const instance = await ctx.runQuery(instances.queries.get, { id: args.instanceId });
-		if (!instance) {
-			throw new Error('Instance not found');
-		}
+		const instance = await requireInstanceOwnershipAction(ctx, args.instanceId);
 
 		const identity = await ctx.auth.getUserIdentity();
 		const autumnCustomer = await getOrCreateCustomer({
@@ -413,10 +410,7 @@ export const finalizeUsage = action({
 		sandboxUsageHours: v.optional(v.number())
 	},
 	handler: async (ctx, args): Promise<FinalizeUsageResult> => {
-		const instance = await ctx.runQuery(instances.queries.get, { id: args.instanceId });
-		if (!instance) {
-			throw new Error('Instance not found');
-		}
+		const instance = await requireInstanceOwnershipAction(ctx, args.instanceId);
 
 		const identity = await ctx.auth.getUserIdentity();
 		const autumnCustomer = await getOrCreateCustomer({
@@ -493,10 +487,7 @@ export const finalizeUsage = action({
 export const getBillingSummary = action({
 	args: billingArgs,
 	handler: async (ctx, args): Promise<BillingSummaryResult> => {
-		const instance = await ctx.runQuery(instances.queries.get, { id: args.instanceId });
-		if (!instance) {
-			throw new Error('Instance not found');
-		}
+		const instance = await requireInstanceOwnershipAction(ctx, args.instanceId);
 
 		const identity = await ctx.auth.getUserIdentity();
 		const autumnCustomer = await getOrCreateCustomer({
@@ -581,10 +572,7 @@ export const createCheckoutSession = action({
 		baseUrl: v.string()
 	},
 	handler: async (ctx, args): Promise<SessionResult> => {
-		const instance = await ctx.runQuery(instances.queries.get, { id: args.instanceId });
-		if (!instance) {
-			throw new Error('Instance not found');
-		}
+		const instance = await requireInstanceOwnershipAction(ctx, args.instanceId);
 
 		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
 			distinctId: instance.clerkId,
@@ -652,10 +640,7 @@ export const createBillingPortalSession = action({
 		baseUrl: v.string()
 	},
 	handler: async (ctx, args): Promise<SessionResult> => {
-		const instance = await ctx.runQuery(instances.queries.get, { id: args.instanceId });
-		if (!instance) {
-			throw new Error('Instance not found');
-		}
+		const instance = await requireInstanceOwnershipAction(ctx, args.instanceId);
 
 		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
 			distinctId: instance.clerkId,

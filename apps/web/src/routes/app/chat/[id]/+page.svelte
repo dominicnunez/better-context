@@ -33,9 +33,7 @@
 	});
 
 	const resourcesQuery = $derived(
-		auth.instanceId
-			? useQuery(api.resources.listUserResources, { instanceId: auth.instanceId })
-			: null
+		auth.instanceId ? useQuery(api.resources.listUserResources, {}) : null
 	);
 
 	// UI state
@@ -276,9 +274,7 @@
 			// If this is a new thread, create it first
 			let actualThreadId = threadId;
 			if (isNewThread) {
-				const newThreadId = await client.mutation(api.threads.create, {
-					instanceId: auth.instanceId
-				});
+				const newThreadId = await client.mutation(api.threads.create, {});
 				actualThreadId = newThreadId;
 
 				await goto(`/app/chat/${newThreadId}`, { replaceState: true });

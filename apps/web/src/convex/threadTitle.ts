@@ -4,7 +4,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText } from 'ai';
 import { v } from 'convex/values';
 
-import { api } from './_generated/api';
+import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { internalAction, type ActionCtx } from './_generated/server';
 
@@ -105,7 +105,7 @@ Rules:
 			.replace(/\.+$/, '');
 
 		// Update the thread with the generated title
-		await ctx.runMutation(api.threads.updateTitle, {
+		await ctx.runMutation(internal.threads.updateTitleInternal, {
 			threadId: args.threadId,
 			title: cleanedTitle
 		});

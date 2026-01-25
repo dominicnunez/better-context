@@ -23,12 +23,14 @@ type NestedApi = typeof api & {
 type NestedInternal = typeof internal & {
 	'scheduled/queries': InternalQueryRecord;
 	'instances/actions': InternalActionRecord;
+	'instances/queries': InternalQueryRecord;
 };
 
 type InstancesApi = {
 	queries: PublicQueryRecord;
 	mutations: PublicMutationRecord;
 	actions: PublicActionRecord;
+	internalQueries: InternalQueryRecord;
 	internalActions: InternalActionRecord;
 };
 
@@ -40,6 +42,7 @@ export const instances: InstancesApi = {
 	queries: (api as NestedApi)['instances/queries'],
 	mutations: (api as NestedApi)['instances/mutations'],
 	actions: (api as NestedApi)['instances/actions'],
+	internalQueries: (internal as NestedInternal)['instances/queries'],
 	internalActions: (internal as NestedInternal)['instances/actions']
 };
 

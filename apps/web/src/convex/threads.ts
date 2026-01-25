@@ -1,15 +1,21 @@
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
 import { internal } from './_generated/api';
 import { AnalyticsEvents } from './analyticsEvents';
+import { getAuthenticatedInstance, requireThreadOwnership } from './authHelpers';
 
+/**
+ * List threads for the authenticated user's instance
+ */
 export const list = query({
-	args: { instanceId: v.id('instances') },
-	handler: async (ctx, args) => {
+	args: {},
+	handler: async (ctx) => {
+		const instance = await getAuthenticatedInstance(ctx);
+
 		const threads = await ctx.db
 			.query('threads')
-			.withIndex('by_instance', (q) => q.eq('instanceId', args.instanceId))
+			.withIndex('by_instance', (q) => q.eq('instanceId', instance._id))
 			.collect();
 
 		const activeStreamSessions = await ctx.db
@@ -28,11 +34,13 @@ export const list = query({
 	}
 });
 
+/**
+ * Get a thread with its messages (requires ownership)
+ */
 export const getWithMessages = query({
 	args: { threadId: v.id('threads') },
 	handler: async (ctx, args) => {
-		const thread = await ctx.db.get(args.threadId);
-		if (!thread) return null;
+		const { thread } = await requireThreadOwnership(ctx, args.threadId);
 
 		const messages = await ctx.db
 			.query('messages')
@@ -66,41 +74,43 @@ export const getWithMessages = query({
 	}
 });
 
+/**
+ * Create a thread for the authenticated user's instance
+ */
 export const create = mutation({
 	args: {
-		instanceId: v.id('instances'),
 		title: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		const instance = await ctx.db.get(args.instanceId);
+		const instance = await getAuthenticatedInstance(ctx);
 
 		const threadId = await ctx.db.insert('threads', {
-			instanceId: args.instanceId,
+			instanceId: instance._id,
 			title: args.title,
 			createdAt: Date.now(),
 			lastActivityAt: Date.now()
 		});
 
-		if (instance) {
-			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
-				distinctId: instance.clerkId,
-				event: AnalyticsEvents.THREAD_CREATED,
-				properties: {
-					instanceId: args.instanceId,
-					threadId
-				}
-			});
-		}
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.THREAD_CREATED,
+			properties: {
+				instanceId: instance._id,
+				threadId
+			}
+		});
 
 		return threadId;
 	}
 });
 
+/**
+ * Remove a thread owned by the authenticated user
+ */
 export const remove = mutation({
 	args: { threadId: v.id('threads') },
 	handler: async (ctx, args) => {
-		const thread = await ctx.db.get(args.threadId);
-		const instance = thread ? await ctx.db.get(thread.instanceId) : null;
+		const { thread, instance } = await requireThreadOwnership(ctx, args.threadId);
 
 		const messages = await ctx.db
 			.query('messages')
@@ -122,25 +132,25 @@ export const remove = mutation({
 
 		await ctx.db.delete(args.threadId);
 
-		if (instance) {
-			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
-				distinctId: instance.clerkId,
-				event: AnalyticsEvents.THREAD_DELETED,
-				properties: {
-					instanceId: thread?.instanceId,
-					threadId: args.threadId,
-					messageCount: messages.length
-				}
-			});
-		}
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.THREAD_DELETED,
+			properties: {
+				instanceId: thread.instanceId,
+				threadId: args.threadId,
+				messageCount: messages.length
+			}
+		});
 	}
 });
 
+/**
+ * Clear messages from a thread owned by the authenticated user
+ */
 export const clearMessages = mutation({
 	args: { threadId: v.id('threads') },
 	handler: async (ctx, args) => {
-		const thread = await ctx.db.get(args.threadId);
-		const instance = thread ? await ctx.db.get(thread.instanceId) : null;
+		const { thread, instance } = await requireThreadOwnership(ctx, args.threadId);
 
 		const messages = await ctx.db
 			.query('messages')
@@ -151,21 +161,36 @@ export const clearMessages = mutation({
 			await ctx.db.delete(message._id);
 		}
 
-		if (instance) {
-			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
-				distinctId: instance.clerkId,
-				event: AnalyticsEvents.THREAD_CLEARED,
-				properties: {
-					instanceId: thread?.instanceId,
-					threadId: args.threadId,
-					messageCount: messages.length
-				}
-			});
-		}
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.THREAD_CLEARED,
+			properties: {
+				instanceId: thread.instanceId,
+				threadId: args.threadId,
+				messageCount: messages.length
+			}
+		});
 	}
 });
 
+/**
+ * Update thread title (requires ownership)
+ */
 export const updateTitle = mutation({
+	args: {
+		threadId: v.id('threads'),
+		title: v.string()
+	},
+	handler: async (ctx, args) => {
+		await requireThreadOwnership(ctx, args.threadId);
+		await ctx.db.patch(args.threadId, { title: args.title });
+	}
+});
+
+/**
+ * Internal mutation to update thread title (for use by internal actions like title generation)
+ */
+export const updateTitleInternal = internalMutation({
 	args: {
 		threadId: v.id('threads'),
 		title: v.string()

@@ -3,13 +3,19 @@ import { v } from 'convex/values';
 
 import { internal } from './_generated/api';
 import { AnalyticsEvents } from './analyticsEvents';
+import { getAuthenticatedInstance, requireApiKeyOwnership } from './authHelpers';
 
-export const listByUser = query({
-	args: { userId: v.id('instances') },
-	handler: async (ctx, args) => {
+/**
+ * List API keys for the authenticated user's instance
+ */
+export const list = query({
+	args: {},
+	handler: async (ctx) => {
+		const instance = await getAuthenticatedInstance(ctx);
+
 		const keys = await ctx.db
 			.query('apiKeys')
-			.withIndex('by_instance', (q) => q.eq('instanceId', args.userId))
+			.withIndex('by_instance', (q) => q.eq('instanceId', instance._id))
 			.collect();
 
 		return keys.map((k) => ({
@@ -24,37 +30,37 @@ export const listByUser = query({
 	}
 });
 
+/**
+ * Create an API key for the authenticated user's instance
+ */
 export const create = mutation({
 	args: {
-		userId: v.id('instances'),
 		name: v.string()
 	},
 	handler: async (ctx, args) => {
-		const instance = await ctx.db.get(args.userId);
+		const instance = await getAuthenticatedInstance(ctx);
 
 		const key = generateApiKey();
 		const keyHash = await hashApiKey(key);
 		const keyPrefix = key.slice(0, 8);
 
 		const id = await ctx.db.insert('apiKeys', {
-			instanceId: args.userId,
+			instanceId: instance._id,
 			name: args.name,
 			keyHash,
 			keyPrefix,
 			createdAt: Date.now()
 		});
 
-		if (instance) {
-			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
-				distinctId: instance.clerkId,
-				event: AnalyticsEvents.API_KEY_CREATED,
-				properties: {
-					instanceId: args.userId,
-					keyId: id,
-					keyName: args.name
-				}
-			});
-		}
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.API_KEY_CREATED,
+			properties: {
+				instanceId: instance._id,
+				keyId: id,
+				keyName: args.name
+			}
+		});
 
 		return { id, key };
 	}
@@ -69,29 +75,32 @@ function generateApiKey(): string {
 	return result;
 }
 
+/**
+ * Revoke an API key owned by the authenticated user
+ */
 export const revoke = mutation({
 	args: { keyId: v.id('apiKeys') },
 	handler: async (ctx, args) => {
-		const apiKey = await ctx.db.get(args.keyId);
-		const instance = apiKey ? await ctx.db.get(apiKey.instanceId) : null;
+		const { apiKey, instance } = await requireApiKeyOwnership(ctx, args.keyId);
 
 		await ctx.db.patch(args.keyId, {
 			revokedAt: Date.now()
 		});
 
-		if (instance && apiKey) {
-			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
-				distinctId: instance.clerkId,
-				event: AnalyticsEvents.API_KEY_REVOKED,
-				properties: {
-					instanceId: apiKey.instanceId,
-					keyId: args.keyId
-				}
-			});
-		}
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: instance.clerkId,
+			event: AnalyticsEvents.API_KEY_REVOKED,
+			properties: {
+				instanceId: apiKey.instanceId,
+				keyId: args.keyId
+			}
+		});
 	}
 });
 
+/**
+ * Validate an API key (internal use - no auth required as this validates the key itself)
+ */
 export const validate = query({
 	args: { apiKey: v.string() },
 	handler: async (ctx, args) => {
@@ -124,6 +133,9 @@ export const validate = query({
 	}
 });
 
+/**
+ * Touch last used timestamp for an API key (internal use for tracking)
+ */
 export const touchLastUsed = mutation({
 	args: { keyId: v.id('apiKeys') },
 	handler: async (ctx, args) => {

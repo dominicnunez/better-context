@@ -5,12 +5,10 @@ import { ConvexHttpClient } from 'convex/browser';
 import { z } from 'zod';
 import { env } from '$env/dynamic/public';
 import { api } from '../../../convex/_generated/api';
-import type { Id } from '../../../convex/_generated/dataModel';
 import type { RequestHandler } from './$types';
 
 interface AuthContext extends Record<string, unknown> {
-	instanceId: Id<'instances'>;
-	clerkId: string;
+	apiKey: string;
 }
 
 const getConvexClient = () => new ConvexHttpClient(env.PUBLIC_CONVEX_URL!);
@@ -45,12 +43,19 @@ mcpServer.tool(
 		}
 
 		const convex = getConvexClient();
-		const { custom } = await convex.query(api.resources.listAvailable, {
-			instanceId: ctx.instanceId
+		const result = await convex.action(api.mcp.listResources, {
+			apiKey: ctx.apiKey
 		});
 
+		if (!result.ok) {
+			return {
+				content: [{ type: 'text' as const, text: JSON.stringify({ error: result.error }) }],
+				isError: true
+			};
+		}
+
 		return {
-			content: [{ type: 'text' as const, text: JSON.stringify(custom, null, 2) }]
+			content: [{ type: 'text' as const, text: JSON.stringify(result.resources, null, 2) }]
 		};
 	}
 );
@@ -81,7 +86,7 @@ mcpServer.tool(
 
 		const convex = getConvexClient();
 		const result = await convex.action(api.mcp.ask, {
-			instanceId: ctx.instanceId,
+			apiKey: ctx.apiKey,
 			question,
 			resources
 		});
@@ -101,76 +106,50 @@ mcpServer.tool(
 
 const transport = new HttpTransport<AuthContext>(mcpServer, { path: '/api/mcp' });
 
-async function validateApiKey(
-	request: Request
-): Promise<
-	{ valid: false; error: string } | { valid: true; context: AuthContext; keyId: Id<'apiKeys'> }
-> {
+function extractApiKey(request: Request): string | null {
 	const authHeader = request.headers.get('Authorization');
 	if (!authHeader?.startsWith('Bearer ')) {
-		return { valid: false, error: 'Missing or invalid Authorization header' };
+		return null;
 	}
-
-	const apiKey = authHeader.slice(7);
-	if (!apiKey) {
-		return { valid: false, error: 'Missing API key' };
-	}
-
-	const convex = getConvexClient();
-	const validation = await convex.query(api.apiKeys.validate, { apiKey });
-
-	if (!validation.valid) {
-		return { valid: false, error: validation.error };
-	}
-
-	return {
-		valid: true,
-		keyId: validation.keyId,
-		context: {
-			instanceId: validation.userId,
-			clerkId: validation.clerkId
-		}
-	};
+	return authHeader.slice(7) || null;
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const auth = await validateApiKey(request);
-	if (!auth.valid) {
-		return new Response(JSON.stringify({ error: auth.error }), {
+	const apiKey = extractApiKey(request);
+	if (!apiKey) {
+		return new Response(JSON.stringify({ error: 'Missing or invalid Authorization header' }), {
 			status: 401,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	}
 
-	const convex = getConvexClient();
-	await convex.mutation(api.apiKeys.touchLastUsed, { keyId: auth.keyId });
-
-	const response = await transport.respond(request, auth.context);
+	// Pass the API key to the MCP context - validation happens in the Convex actions
+	const response = await transport.respond(request, { apiKey });
 	return response ?? new Response('Not Found', { status: 404 });
 };
 
 export const GET: RequestHandler = async ({ request }) => {
-	const auth = await validateApiKey(request);
-	if (!auth.valid) {
-		return new Response(JSON.stringify({ error: auth.error }), {
+	const apiKey = extractApiKey(request);
+	if (!apiKey) {
+		return new Response(JSON.stringify({ error: 'Missing or invalid Authorization header' }), {
 			status: 401,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	}
 
-	const response = await transport.respond(request, auth.context);
+	const response = await transport.respond(request, { apiKey });
 	return response ?? new Response('Not Found', { status: 404 });
 };
 
 export const DELETE: RequestHandler = async ({ request }) => {
-	const auth = await validateApiKey(request);
-	if (!auth.valid) {
-		return new Response(JSON.stringify({ error: auth.error }), {
+	const apiKey = extractApiKey(request);
+	if (!apiKey) {
+		return new Response(JSON.stringify({ error: 'Missing or invalid Authorization header' }), {
 			status: 401,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	}
 
-	const response = await transport.respond(request, auth.context);
+	const response = await transport.respond(request, { apiKey });
 	return response ?? new Response('Not Found', { status: 404 });
 };

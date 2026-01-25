@@ -1,6 +1,10 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import { requireThreadOwnership } from './authHelpers';
 
+/**
+ * Create a stream session for a thread (requires ownership)
+ */
 export const create = mutation({
 	args: {
 		threadId: v.id('threads'),
@@ -8,6 +12,8 @@ export const create = mutation({
 		sessionId: v.string()
 	},
 	handler: async (ctx, args) => {
+		await requireThreadOwnership(ctx, args.threadId);
+
 		const existing = await ctx.db
 			.query('streamSessions')
 			.withIndex('by_thread', (q) => q.eq('threadId', args.threadId))
@@ -32,6 +38,10 @@ export const create = mutation({
 	}
 });
 
+/**
+ * Complete a stream session by session ID
+ * Note: This is typically called by internal server processes, uses session ID for auth
+ */
 export const complete = mutation({
 	args: {
 		sessionId: v.string()
@@ -51,6 +61,10 @@ export const complete = mutation({
 	}
 });
 
+/**
+ * Fail a stream session by session ID
+ * Note: This is typically called by internal server processes, uses session ID for auth
+ */
 export const fail = mutation({
 	args: {
 		sessionId: v.string(),
@@ -72,11 +86,16 @@ export const fail = mutation({
 	}
 });
 
+/**
+ * Get active stream session for a thread (requires ownership)
+ */
 export const getActiveForThread = query({
 	args: {
 		threadId: v.id('threads')
 	},
 	handler: async (ctx, args) => {
+		await requireThreadOwnership(ctx, args.threadId);
+
 		return await ctx.db
 			.query('streamSessions')
 			.withIndex('by_thread', (q) => q.eq('threadId', args.threadId))
@@ -85,6 +104,10 @@ export const getActiveForThread = query({
 	}
 });
 
+/**
+ * Get stream session by session ID
+ * Note: This uses the session ID itself as the auth mechanism
+ */
 export const getBySessionId = query({
 	args: {
 		sessionId: v.string()
@@ -97,6 +120,9 @@ export const getBySessionId = query({
 	}
 });
 
+/**
+ * Cleanup old stream sessions (internal maintenance)
+ */
 export const cleanupOld = mutation({
 	args: {},
 	handler: async (ctx) => {

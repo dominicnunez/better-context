@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 
 import { internal } from './_generated/api';
 import { mutation, query } from './_generated/server';
+import { requireMessageOwnership, requireThreadOwnership } from './authHelpers';
 
 // BtcaChunk validator (same as in schema)
 const btcaChunkValidator = v.union(
@@ -38,7 +39,7 @@ const messageContentValidator = v.union(
 );
 
 /**
- * Add a user message to a thread
+ * Add a user message to a thread (requires ownership)
  */
 export const addUserMessage = mutation({
 	args: {
@@ -47,9 +48,10 @@ export const addUserMessage = mutation({
 		resources: v.array(v.string())
 	},
 	handler: async (ctx, args) => {
+		const { thread } = await requireThreadOwnership(ctx, args.threadId);
+
 		// Check if thread needs a title generated (first message)
-		const thread = await ctx.db.get(args.threadId);
-		const shouldGenerateTitle = thread && !thread.title;
+		const shouldGenerateTitle = !thread.title;
 
 		// Add the message
 		const messageId = await ctx.db.insert('messages', {
@@ -93,7 +95,7 @@ export const addUserMessage = mutation({
 });
 
 /**
- * Add an assistant message to a thread
+ * Add an assistant message to a thread (requires ownership)
  */
 export const addAssistantMessage = mutation({
 	args: {
@@ -102,6 +104,8 @@ export const addAssistantMessage = mutation({
 		canceled: v.optional(v.boolean())
 	},
 	handler: async (ctx, args) => {
+		await requireThreadOwnership(ctx, args.threadId);
+
 		const messageId = await ctx.db.insert('messages', {
 			threadId: args.threadId,
 			role: 'assistant',
@@ -118,7 +122,7 @@ export const addAssistantMessage = mutation({
 });
 
 /**
- * Add a system message to a thread
+ * Add a system message to a thread (requires ownership)
  */
 export const addSystemMessage = mutation({
 	args: {
@@ -126,6 +130,8 @@ export const addSystemMessage = mutation({
 		content: v.string()
 	},
 	handler: async (ctx, args) => {
+		await requireThreadOwnership(ctx, args.threadId);
+
 		return await ctx.db.insert('messages', {
 			threadId: args.threadId,
 			role: 'system',
@@ -136,11 +142,13 @@ export const addSystemMessage = mutation({
 });
 
 /**
- * Get all messages for a thread
+ * Get all messages for a thread (requires ownership)
  */
 export const getByThread = query({
 	args: { threadId: v.id('threads') },
 	handler: async (ctx, args) => {
+		await requireThreadOwnership(ctx, args.threadId);
+
 		const messages = await ctx.db
 			.query('messages')
 			.withIndex('by_thread', (q) => q.eq('threadId', args.threadId))
@@ -151,7 +159,7 @@ export const getByThread = query({
 });
 
 /**
- * Update an assistant message (used for streaming updates)
+ * Update an assistant message (requires ownership)
  */
 export const updateAssistantMessage = mutation({
 	args: {
@@ -159,22 +167,24 @@ export const updateAssistantMessage = mutation({
 		content: messageContentValidator
 	},
 	handler: async (ctx, args) => {
+		await requireMessageOwnership(ctx, args.messageId);
 		await ctx.db.patch(args.messageId, { content: args.content });
 	}
 });
 
 /**
- * Mark an assistant message as canceled
+ * Mark an assistant message as canceled (requires ownership)
  */
 export const markCanceled = mutation({
 	args: { messageId: v.id('messages') },
 	handler: async (ctx, args) => {
+		await requireMessageOwnership(ctx, args.messageId);
 		await ctx.db.patch(args.messageId, { canceled: true });
 	}
 });
 
 /**
- * Delete a message and all messages after it in the thread (for retry functionality)
+ * Delete a message and all messages after it in the thread (requires ownership)
  */
 export const deleteMessageAndAfter = mutation({
 	args: {
@@ -182,6 +192,8 @@ export const deleteMessageAndAfter = mutation({
 		messageId: v.id('messages')
 	},
 	handler: async (ctx, args) => {
+		await requireThreadOwnership(ctx, args.threadId);
+
 		const targetMessage = await ctx.db.get(args.messageId);
 		if (!targetMessage || targetMessage.threadId !== args.threadId) {
 			throw new Error('Message not found in thread');
