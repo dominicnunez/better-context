@@ -72,11 +72,14 @@ export namespace Model {
 		let apiKey: string | undefined;
 
 		if (!options.skipAuth) {
-			apiKey = await Auth.getApiKey(normalizedProviderId);
-
-			// Special handling for 'opencode' provider - it's a gateway that always works
-			if (!apiKey && normalizedProviderId !== 'opencode') {
-				throw new ProviderNotAuthenticatedError(providerId);
+			// Special handling for 'opencode' provider - check env var first
+			if (normalizedProviderId === 'opencode') {
+				apiKey = process.env.OPENCODE_API_KEY || (await Auth.getApiKey(normalizedProviderId));
+			} else {
+				apiKey = await Auth.getApiKey(normalizedProviderId);
+				if (!apiKey) {
+					throw new ProviderNotAuthenticatedError(providerId);
+				}
 			}
 		}
 
