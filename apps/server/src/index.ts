@@ -228,7 +228,6 @@ const createApp = (deps: {
 				model: config.model,
 				providerTimeoutMs: config.providerTimeoutMs ?? null,
 				resourcesDirectory: config.resourcesDirectory,
-				collectionsDirectory: config.collectionsDirectory,
 				resourceCount: config.resources.length
 			});
 		})
@@ -506,8 +505,7 @@ export const startServer = async (options: StartServerOptions = {}): Promise<Ser
 		provider: config.provider,
 		model: config.model,
 		resources: config.resources.map((r) => r.name),
-		resourcesDirectory: config.resourcesDirectory,
-		collectionsDirectory: config.collectionsDirectory
+		resourcesDirectory: config.resourcesDirectory
 	});
 
 	const resources = Resources.create(config);

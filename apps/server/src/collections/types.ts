@@ -4,7 +4,6 @@ import { resourceNameToKey } from '../resources/helpers.ts';
 export type CollectionResult = {
 	path: string;
 	agentInstructions: string;
-	mode: 'fs' | 'virtual';
 	vfsId?: string;
 };
 

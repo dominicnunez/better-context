@@ -298,7 +298,6 @@ export namespace Agent {
 						providerId: config.provider,
 						modelId: config.model,
 						collectionPath: collection.path,
-						collectionMode: collection.mode,
 						vfsId: collection.vfsId,
 						agentInstructions: collection.agentInstructions,
 						question
@@ -349,7 +348,6 @@ export namespace Agent {
 					providerId: config.provider,
 					modelId: config.model,
 					collectionPath: collection.path,
-					collectionMode: collection.mode,
 					vfsId: collection.vfsId,
 					agentInstructions: collection.agentInstructions,
 					question
@@ -384,13 +382,11 @@ export namespace Agent {
 		 * This still spawns a full OpenCode instance for clients that need it
 		 */
 		const getOpencodeInstance: Service['getOpencodeInstance'] = async ({ collection }) => {
-			if (collection.mode === 'virtual') {
-				throw new AgentError({
-					message: 'OpenCode instance not available for virtual collections',
-					hint: 'Disable virtualizeResources or use the btca ask/stream APIs instead.',
-					cause: new Error('Virtual collections are not compatible with filesystem-based OpenCode')
-				});
-			}
+			throw new AgentError({
+				message: 'OpenCode instance not available',
+				hint: 'BTCA uses virtual collections only. Use the btca ask/stream APIs instead.',
+				cause: new Error('Virtual collections are not compatible with filesystem-based OpenCode')
+			});
 			const ocConfig = buildOpenCodeConfig({
 				agentInstructions: collection.agentInstructions,
 				providerId: config.provider,

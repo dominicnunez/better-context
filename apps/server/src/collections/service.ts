@@ -1,4 +1,3 @@
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { Config } from '../config/index.ts';
@@ -99,37 +98,23 @@ export namespace Collections {
 
 					const sortedNames = [...uniqueNames].sort((a, b) => a.localeCompare(b));
 					const key = getCollectionKey(sortedNames);
-					const isVirtual = args.config.virtualizeResources;
-					const collectionPath = isVirtual ? '/' : path.join(args.config.collectionsDirectory, key);
-					const vfsId = isVirtual ? VirtualFs.create() : undefined;
+					const collectionPath = '/';
+					const vfsId = VirtualFs.create();
 					const cleanupVirtual = () => {
-						if (!vfsId) return;
 						VirtualFs.dispose(vfsId);
 						clearVirtualCollectionMetadata(vfsId);
 					};
 
-					if (isVirtual) {
-						try {
-							// Virtual collections use the VFS root as the collection root.
-							await VirtualFs.mkdir(collectionPath, { recursive: true }, vfsId);
-						} catch (cause) {
-							cleanupVirtual();
-							throw new CollectionError({
-								message: `Failed to initialize virtual collection root: "${collectionPath}"`,
-								hint: 'Check that the virtual filesystem is available.',
-								cause
-							});
-						}
-					} else {
-						try {
-							await fs.mkdir(collectionPath, { recursive: true });
-						} catch (cause) {
-							throw new CollectionError({
-								message: `Failed to create collection directory: "${collectionPath}"`,
-								hint: 'Check that you have write permissions to the btca data directory.',
-								cause
-							});
-						}
+					try {
+						// Virtual collections use the VFS root as the collection root.
+						await VirtualFs.mkdir(collectionPath, { recursive: true }, vfsId);
+					} catch (cause) {
+						cleanupVirtual();
+						throw new CollectionError({
+							message: `Failed to initialize virtual collection root: "${collectionPath}"`,
+							hint: 'Check that the virtual filesystem is available.',
+							cause
+						});
 					}
 
 					const loadedResources: BtcaFsResource[] = [];
@@ -166,78 +151,57 @@ export namespace Collections {
 							});
 						}
 
-						if (isVirtual) {
-							const virtualResourcePath = path.posix.join('/', resource.fsName);
-							try {
-								await VirtualFs.rm(virtualResourcePath, { recursive: true, force: true }, vfsId);
-							} catch {
-								// ignore
-							}
-							try {
-								await VirtualFs.importDirectoryFromDisk({
-									sourcePath: resourcePath,
-									destinationPath: virtualResourcePath,
-									vfsId,
-									ignore: (relativePath) => {
-										const normalized = relativePath.split(path.sep).join('/');
-										return (
-											normalized === '.git' ||
-											normalized.startsWith('.git/') ||
-											normalized.includes('/.git/')
-										);
-									}
-								});
-							} catch (cause) {
-								cleanupVirtual();
-								throw new CollectionError({
-									message: `Failed to virtualize resource "${resource.name}"`,
-									hint: CommonHints.CLEAR_CACHE,
-									cause
-								});
-							}
-
-							const definition = args.config.getResource(resource.name);
-							const metadata = await buildVirtualMetadata({
-								resource,
-								resourcePath,
-								loadedAt,
-								definition
-							});
-							if (metadata) metadataResources.push(metadata);
-						} else {
-							const linkPath = path.join(collectionPath, resource.fsName);
-							try {
-								await fs.rm(linkPath, { recursive: true, force: true });
-							} catch {
-								// ignore
-							}
-							try {
-								await fs.symlink(resourcePath, linkPath, 'junction');
-							} catch (cause) {
-								throw new CollectionError({
-									message: `Failed to create symlink for resource "${resource.name}"`,
-									hint: 'This may be a filesystem permissions issue or the link already exists.',
-									cause
-								});
-							}
+						const virtualResourcePath = path.posix.join('/', resource.fsName);
+						try {
+							await VirtualFs.rm(virtualResourcePath, { recursive: true, force: true }, vfsId);
+						} catch {
+							// ignore
 						}
+						try {
+							await VirtualFs.importDirectoryFromDisk({
+								sourcePath: resourcePath,
+								destinationPath: virtualResourcePath,
+								vfsId,
+								ignore: (relativePath) => {
+									const normalized = relativePath.split(path.sep).join('/');
+									return (
+										normalized === '.git' ||
+										normalized.startsWith('.git/') ||
+										normalized.includes('/.git/')
+									);
+								}
+							});
+						} catch (cause) {
+							cleanupVirtual();
+							throw new CollectionError({
+								message: `Failed to virtualize resource "${resource.name}"`,
+								hint: CommonHints.CLEAR_CACHE,
+								cause
+							});
+						}
+
+						const definition = args.config.getResource(resource.name);
+						const metadata = await buildVirtualMetadata({
+							resource,
+							resourcePath,
+							loadedAt,
+							definition
+						});
+						if (metadata) metadataResources.push(metadata);
 					}
 
-					if (vfsId) {
-						setVirtualCollectionMetadata({
-							vfsId,
-							collectionKey: key,
-							createdAt: loadedAt,
-							resources: metadataResources
-						});
-					}
+					setVirtualCollectionMetadata({
+						vfsId,
+						collectionKey: key,
+						createdAt: loadedAt,
+						resources: metadataResources
+					});
 
 					const instructionBlocks = loadedResources.map(createCollectionInstructionBlock);
 
 					return {
 						path: collectionPath,
 						agentInstructions: instructionBlocks.join('\n\n'),
-						mode: isVirtual ? 'virtual' : 'fs',
 						vfsId
 					};
 				})

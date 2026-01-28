@@ -2,11 +2,9 @@
  * Read Tool
  * Reads file contents with line numbers, truncation, and special file handling
  */
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { z } from 'zod';
 
-import { Sandbox } from './sandbox.ts';
 import type { ToolContext } from './context.ts';
 import { VirtualSandbox } from './virtual-sandbox.ts';
 import { VirtualFs } from '../vfs/virtual-fs.ts';
@@ -75,30 +73,17 @@ export namespace ReadTool {
 		return false;
 	}
 
-	async function isBinaryFile(filepath: string): Promise<boolean> {
-		const file = Bun.file(filepath);
-		const chunk = await file.slice(0, 8192).arrayBuffer();
-		return isBinaryBuffer(new Uint8Array(chunk));
-	}
-
 	/**
 	 * Execute the read tool
 	 */
 	export async function execute(params: ParametersType, context: ToolContext): Promise<Result> {
 		const { basePath, vfsId } = context;
-		const mode = context.mode ?? 'fs';
 
 		// Validate and resolve path within sandbox
-		const resolvedPath =
-			mode === 'virtual'
-				? await VirtualSandbox.resolvePathWithSymlinks(basePath, params.path, vfsId)
-				: await Sandbox.resolvePathWithSymlinks(basePath, params.path);
+		const resolvedPath = await VirtualSandbox.resolvePathWithSymlinks(basePath, params.path, vfsId);
 
 		// Check if file exists
-		const exists =
-			mode === 'virtual'
-				? await VirtualFs.exists(resolvedPath, vfsId)
-				: await Bun.file(resolvedPath).exists();
+		const exists = await VirtualFs.exists(resolvedPath, vfsId);
 		if (!exists) {
 			// Try to provide suggestions
 			const dir = path.dirname(resolvedPath);
@@ -106,10 +91,7 @@ export namespace ReadTool {
 			let suggestions: string[] = [];
 
 			try {
-				const files =
-					mode === 'virtual'
-						? (await VirtualFs.readdir(dir, vfsId)).map((entry) => entry.name)
-						: await fs.readdir(dir);
+				const files = (await VirtualFs.readdir(dir, vfsId)).map((entry) => entry.name);
 				suggestions = files
 					.filter((f) => f.toLowerCase().includes(filename.toLowerCase().slice(0, 3)))
 					.slice(0, 5);
@@ -136,15 +118,9 @@ export namespace ReadTool {
 
 		// Handle images
 		if (IMAGE_EXTENSIONS.has(ext)) {
-			const bytes =
-				mode === 'virtual'
-					? await VirtualFs.readFileBuffer(resolvedPath, vfsId)
-					: new Uint8Array(await Bun.file(resolvedPath).arrayBuffer());
+			const bytes = await VirtualFs.readFileBuffer(resolvedPath, vfsId);
 			const base64 = Buffer.from(bytes).toString('base64');
-			const mime =
-				mode === 'virtual'
-					? getImageMime(ext)
-					: Bun.file(resolvedPath).type || 'application/octet-stream';
+			const mime = getImageMime(ext);
 
 			return {
 				title: params.path,
@@ -166,10 +142,7 @@ export namespace ReadTool {
 
 		// Handle PDFs
 		if (PDF_EXTENSIONS.has(ext)) {
-			const bytes =
-				mode === 'virtual'
-					? await VirtualFs.readFileBuffer(resolvedPath, vfsId)
-					: new Uint8Array(await Bun.file(resolvedPath).arrayBuffer());
+			const bytes = await VirtualFs.readFileBuffer(resolvedPath, vfsId);
 			const base64 = Buffer.from(bytes).toString('base64');
 
 			return {
@@ -191,11 +164,7 @@ export namespace ReadTool {
 		}
 
 		// Check for binary files
-		if (
-			mode === 'virtual'
-				? isBinaryBuffer(await VirtualFs.readFileBuffer(resolvedPath, vfsId))
-				: await isBinaryFile(resolvedPath)
-		) {
+		if (isBinaryBuffer(await VirtualFs.readFileBuffer(resolvedPath, vfsId))) {
 			return {
 				title: params.path,
 				output: `[Binary file: ${path.basename(resolvedPath)}]`,
@@ -208,10 +177,7 @@ export namespace ReadTool {
 		}
 
 		// Read text file
-		const text =
-			mode === 'virtual'
-				? await VirtualFs.readFile(resolvedPath, vfsId)
-				: await Bun.file(resolvedPath).text();
+		const text = await VirtualFs.readFile(resolvedPath, vfsId);
 		const allLines = text.split('\n');
 
 		const offset = params.offset ?? 0;

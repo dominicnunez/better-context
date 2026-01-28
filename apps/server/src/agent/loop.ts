@@ -6,7 +6,6 @@ import { streamText, tool, stepCountIs, type ModelMessage } from 'ai';
 
 import { Model } from '../providers/index.ts';
 import { ReadTool, GrepTool, GlobTool, ListTool } from '../tools/index.ts';
-import type { ToolMode } from '../tools/context.ts';
 
 export namespace AgentLoop {
 	// Event types for streaming
@@ -26,7 +25,6 @@ export namespace AgentLoop {
 		providerId: string;
 		modelId: string;
 		collectionPath: string;
-		collectionMode?: ToolMode;
 		vfsId?: string;
 		agentInstructions: string;
 		question: string;
@@ -68,13 +66,13 @@ export namespace AgentLoop {
 	/**
 	 * Create the tools for the agent
 	 */
-	function createTools(basePath: string, mode: ToolMode, vfsId?: string) {
+	function createTools(basePath: string, vfsId?: string) {
 		return {
 			read: tool({
 				description: 'Read the contents of a file. Returns the file contents with line numbers.',
 				inputSchema: ReadTool.Parameters,
 				execute: async (params: ReadTool.ParametersType) => {
-					const result = await ReadTool.execute(params, { basePath, mode, vfsId });
+					const result = await ReadTool.execute(params, { basePath, vfsId });
 					return result.output;
 				}
 			}),
@@ -84,7 +82,7 @@ export namespace AgentLoop {
 					'Search for a regex pattern in file contents. Returns matching lines with file paths and line numbers.',
 				inputSchema: GrepTool.Parameters,
 				execute: async (params: GrepTool.ParametersType) => {
-					const result = await GrepTool.execute(params, { basePath, mode, vfsId });
+					const result = await GrepTool.execute(params, { basePath, vfsId });
 					return result.output;
 				}
 			}),
@@ -94,7 +92,7 @@ export namespace AgentLoop {
 					'Find files matching a glob pattern (e.g. "**/*.ts", "src/**/*.js"). Returns a list of matching file paths sorted by modification time.',
 				inputSchema: GlobTool.Parameters,
 				execute: async (params: GlobTool.ParametersType) => {
-					const result = await GlobTool.execute(params, { basePath, mode, vfsId });
+					const result = await GlobTool.execute(params, { basePath, vfsId });
 					return result.output;
 				}
 			}),
@@ -104,7 +102,7 @@ export namespace AgentLoop {
 					'List the contents of a directory. Returns files and subdirectories with their types.',
 				inputSchema: ListTool.Parameters,
 				execute: async (params: ListTool.ParametersType) => {
-					const result = await ListTool.execute(params, { basePath, mode, vfsId });
+					const result = await ListTool.execute(params, { basePath, vfsId });
 					return result.output;
 				}
 			})
@@ -114,8 +112,8 @@ export namespace AgentLoop {
 	/**
 	 * Get initial context by listing the collection directory
 	 */
-	async function getInitialContext(collectionPath: string, mode: ToolMode, vfsId?: string) {
-		const result = await ListTool.execute({ path: '.' }, { basePath: collectionPath, mode, vfsId });
+	async function getInitialContext(collectionPath: string, vfsId?: string) {
+		const result = await ListTool.execute({ path: '.' }, { basePath: collectionPath, vfsId });
 		return `Collection contents:\n${result.output}`;
 	}
 
@@ -127,7 +125,6 @@ export namespace AgentLoop {
 			providerId,
 			modelId,
 			collectionPath,
-			collectionMode = 'fs',
 			vfsId,
 			agentInstructions,
 			question,
@@ -138,7 +135,7 @@ export namespace AgentLoop {
 		const model = await Model.getModel(providerId, modelId);
 
 		// Get initial context
-		const initialContext = await getInitialContext(collectionPath, collectionMode, vfsId);
+		const initialContext = await getInitialContext(collectionPath, vfsId);
 
 		// Build messages
 		const messages: ModelMessage[] = [
@@ -149,7 +146,7 @@ export namespace AgentLoop {
 		];
 
 		// Create tools
-		const tools = createTools(collectionPath, collectionMode, vfsId);
+		const tools = createTools(collectionPath, vfsId);
 
 		// Collect events
 		const events: AgentEvent[] = [];
@@ -223,7 +220,6 @@ export namespace AgentLoop {
 			providerId,
 			modelId,
 			collectionPath,
-			collectionMode = 'fs',
 			vfsId,
 			agentInstructions,
 			question,
@@ -234,7 +230,7 @@ export namespace AgentLoop {
 		const model = await Model.getModel(providerId, modelId);
 
 		// Get initial context
-		const initialContext = await getInitialContext(collectionPath, collectionMode, vfsId);
+		const initialContext = await getInitialContext(collectionPath, vfsId);
 
 		// Build messages
 		const messages: ModelMessage[] = [
@@ -245,7 +241,7 @@ export namespace AgentLoop {
 		];
 
 		// Create tools
-		const tools = createTools(collectionPath, collectionMode, vfsId);
+		const tools = createTools(collectionPath, vfsId);
 
 		// Run streamText with tool execution
 		const result = streamText({

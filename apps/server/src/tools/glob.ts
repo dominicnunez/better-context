@@ -1,13 +1,10 @@
 /**
  * Glob Tool
- * Fast file pattern matching using ripgrep
+ * Fast file pattern matching in-memory
  */
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { z } from 'zod';
 
-import { Ripgrep } from './ripgrep.ts';
-import { Sandbox } from './sandbox.ts';
 import type { ToolContext } from './context.ts';
 import { VirtualSandbox } from './virtual-sandbox.ts';
 import { VirtualFs } from '../vfs/virtual-fs.ts';
@@ -44,41 +41,22 @@ export namespace GlobTool {
 	 */
 	export async function execute(params: ParametersType, context: ToolContext): Promise<Result> {
 		const { basePath, vfsId } = context;
-		const mode = context.mode ?? 'fs';
 
 		// Resolve search path within sandbox
-		const searchPath = params.path
-			? mode === 'virtual'
-				? VirtualSandbox.resolvePath(basePath, params.path)
-				: Sandbox.resolvePath(basePath, params.path)
-			: basePath;
+		const searchPath = params.path ? VirtualSandbox.resolvePath(basePath, params.path) : basePath;
 
 		// Validate the search path exists and is a directory
 		try {
-			if (mode === 'virtual') {
-				const stats = await VirtualFs.stat(searchPath, vfsId);
-				if (!stats.isDirectory) {
-					return {
-						title: params.pattern,
-						output: `Path is not a directory: ${params.path || '.'}`,
-						metadata: {
-							count: 0,
-							truncated: false
-						}
-					};
-				}
-			} else {
-				const stats = await fs.stat(searchPath);
-				if (!stats.isDirectory()) {
-					return {
-						title: params.pattern,
-						output: `Path is not a directory: ${params.path || '.'}`,
-						metadata: {
-							count: 0,
-							truncated: false
-						}
-					};
-				}
+			const stats = await VirtualFs.stat(searchPath, vfsId);
+			if (!stats.isDirectory) {
+				return {
+					title: params.pattern,
+					output: `Path is not a directory: ${params.path || '.'}`,
+					metadata: {
+						count: 0,
+						truncated: false
+					}
+				};
 			}
 		} catch {
 			return {
@@ -95,48 +73,20 @@ export namespace GlobTool {
 		const files: Array<{ path: string; mtime: number }> = [];
 		let truncated = false;
 
-		if (mode === 'virtual') {
-			const patternRegex = globToRegExp(params.pattern);
-			const allFiles = await VirtualFs.listFilesRecursive(searchPath, vfsId);
-			for (const file of allFiles) {
-				if (files.length >= MAX_RESULTS) {
-					truncated = true;
-					break;
-				}
-				const relative = path.posix.relative(searchPath, file);
-				if (!patternRegex.test(relative)) continue;
-				try {
-					const stats = await VirtualFs.stat(file, vfsId);
-					files.push({ path: file, mtime: stats.mtimeMs });
-				} catch {
-					files.push({ path: file, mtime: 0 });
-				}
+		const patternRegex = globToRegExp(params.pattern);
+		const allFiles = await VirtualFs.listFilesRecursive(searchPath, vfsId);
+		for (const file of allFiles) {
+			if (files.length >= MAX_RESULTS) {
+				truncated = true;
+				break;
 			}
-		} else {
-			for await (const file of Ripgrep.files({
-				cwd: searchPath,
-				glob: [params.pattern],
-				hidden: true
-			})) {
-				if (files.length >= MAX_RESULTS) {
-					truncated = true;
-					break;
-				}
-
-				const fullPath = path.resolve(searchPath, file);
-
-				try {
-					const stats = await fs.stat(fullPath);
-					files.push({
-						path: fullPath,
-						mtime: stats.mtime.getTime()
-					});
-				} catch {
-					files.push({
-						path: fullPath,
-						mtime: 0
-					});
-				}
+			const relative = path.posix.relative(searchPath, file);
+			if (!patternRegex.test(relative)) continue;
+			try {
+				const stats = await VirtualFs.stat(file, vfsId);
+				files.push({ path: file, mtime: stats.mtimeMs });
+			} catch {
+				files.push({ path: file, mtime: 0 });
 			}
 		}
 
@@ -155,9 +105,7 @@ export namespace GlobTool {
 		files.sort((a, b) => b.mtime - a.mtime);
 
 		// Format output with relative paths
-		const outputLines = files.map((f) =>
-			mode === 'virtual' ? path.posix.relative(basePath, f.path) : path.relative(basePath, f.path)
-		);
+		const outputLines = files.map((f) => path.posix.relative(basePath, f.path));
 
 		// Add truncation notice
 		if (truncated) {

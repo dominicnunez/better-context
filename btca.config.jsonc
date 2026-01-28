@@ -1,7 +1,6 @@
 {
 	"$schema": "https://btca.dev/btca.schema.json",
 	"dataDirectory": ".btca",
-	"virtualizeResources": true,
 	"resources": [
 		{
 			"type": "git",

@@ -85,7 +85,7 @@ describe('VirtualFs (just-bash)', () => {
 			expect(await VirtualFs.exists(posix.join(resourcePath, 'README.md'), vfsId)).toBe(true);
 			expect(await VirtualFs.exists(posix.join(resourcePath, '.git', 'HEAD'), vfsId)).toBe(false);
 
-			const context = { basePath: collectionPath, mode: 'virtual' as const, vfsId };
+			const context = { basePath: collectionPath, vfsId };
 
 			const listResult = await ListTool.execute({ path: '.' }, context);
 			expect(listResult.metadata.entries.some((entry) => entry.name === resourceName)).toBe(true);

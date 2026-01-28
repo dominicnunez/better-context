@@ -11,7 +11,7 @@
 		},
 		"dataDirectory": {
 			"type": "string",
-			"description": "Directory for storing btca data (resources, collections). Defaults to ~/.local/share/btca",
+			"description": "Directory for storing btca data (resources). Defaults to ~/.local/share/btca",
 			"default": "~/.local/share/btca"
 		},
 		"model": {
@@ -28,11 +28,6 @@
 			"type": "number",
 			"description": "Timeout in milliseconds for provider requests (optional)",
 			"default": 300000
-		},
-		"virtualizeResources": {
-			"type": "boolean",
-			"description": "Load resources into an in-memory virtual filesystem rooted at /, with each resource mounted at /<resourceName>",
-			"default": false
 		},
 		"resources": {
 			"type": "array",
