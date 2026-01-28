@@ -124,6 +124,7 @@ export namespace Config {
 		addResource: (resource: ResourceDefinition) => Promise<ResourceDefinition>;
 		removeResource: (name: string) => Promise<void>;
 		clearResources: () => Promise<{ cleared: number }>;
+		reload: () => Promise<void>;
 	};
 
 	const expandHome = (path: string): string => {
@@ -658,6 +659,32 @@ export namespace Config {
 
 				Metrics.info('config.resources.cleared', { count: clearedCount });
 				return { cleared: clearedCount };
+			},
+
+			reload: async () => {
+				// Reload the config file from disk
+				// configPath points to either project config (if it existed at startup) or global config
+				Metrics.info('config.reload.start', { configPath });
+
+				const configExists = await Bun.file(configPath).exists();
+				if (!configExists) {
+					Metrics.info('config.reload.skipped', { reason: 'file not found', configPath });
+					return;
+				}
+
+				const reloaded = await loadConfigFromPath(configPath);
+
+				// Update the appropriate config based on what we had at startup
+				if (currentProjectConfig !== null) {
+					currentProjectConfig = reloaded;
+				} else {
+					currentGlobalConfig = reloaded;
+				}
+
+				Metrics.info('config.reload.done', {
+					resources: reloaded.resources.length,
+					configPath
+				});
 			}
 		};
 

@@ -360,7 +360,7 @@ export namespace RemoteConfigService {
 	export function createDefaultConfig(projectName: string): RemoteConfig {
 		return {
 			project: projectName,
-			model: 'claude-sonnet',
+			model: 'claude-haiku',
 			resources: []
 		};
 	}

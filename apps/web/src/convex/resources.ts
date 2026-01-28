@@ -221,6 +221,50 @@ export const listAvailableInternal = internalQuery({
 });
 
 /**
+ * Internal version that filters by project (for use by internal actions only)
+ * Returns global resources plus custom resources for the specific project
+ */
+export const listAvailableForProject = internalQuery({
+	args: {
+		projectId: v.id('projects')
+	},
+	returns: v.object({
+		global: v.array(globalResourceValidator),
+		custom: v.array(customResourceValidator)
+	}),
+	handler: async (ctx, args) => {
+		const userResources = await ctx.db
+			.query('userResources')
+			.withIndex('by_project', (q) => q.eq('projectId', args.projectId))
+			.collect();
+
+		const global = GLOBAL_RESOURCES.map((resource) => ({
+			name: resource.name,
+			displayName: resource.displayName,
+			type: resource.type,
+			url: resource.url,
+			branch: resource.branch,
+			searchPath: resource.searchPath ?? resource.searchPaths?.[0],
+			specialNotes: resource.specialNotes,
+			isGlobal: true as const
+		}));
+
+		const custom = userResources.map((r) => ({
+			name: r.name,
+			displayName: r.name,
+			type: r.type,
+			url: r.url,
+			branch: r.branch,
+			searchPath: r.searchPath,
+			specialNotes: r.specialNotes,
+			isGlobal: false as const
+		}));
+
+		return { global, custom };
+	}
+});
+
+/**
  * Add a custom resource to the authenticated user's instance
  */
 export const addCustomResource = mutation({

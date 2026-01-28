@@ -339,7 +339,7 @@ async function handleMcpSetup(cwd: string, force?: boolean): Promise<void> {
 	const config = {
 		$schema: REMOTE_CONFIG_SCHEMA_URL,
 		project: projectName,
-		model: 'claude-sonnet',
+		model: 'claude-haiku',
 		resources: [] as unknown[]
 	};
 

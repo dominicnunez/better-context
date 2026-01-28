@@ -263,6 +263,15 @@ const createApp = (deps: {
 			return c.json(providers);
 		})
 
+		// POST /reload-config - Reload config from disk
+		.post('/reload-config', async (c: HonoContext) => {
+			await config.reload();
+			return c.json({
+				ok: true,
+				resources: config.resources.map((r) => r.name)
+			});
+		})
+
 		// POST /question
 		.post('/question', async (c: HonoContext) => {
 			const decoded = await decodeJson(c.req.raw, QuestionRequestSchema);

@@ -160,12 +160,11 @@ export const ask = action({
 
 		// Note: Usage tracking is handled in the validate action via touchUsage
 
-		// For now, resources are still at instance level (backward compatible)
-		// In Phase 5, this will be updated to filter by project
+		// Validate resources against project-specific resources
 		const availableResources: {
 			global: { name: string }[];
 			custom: { name: string }[];
-		} = await ctx.runQuery(internal.resources.listAvailableInternal, { instanceId });
+		} = await ctx.runQuery(internal.resources.listAvailableForProject, { projectId });
 		const allResourceNames: string[] = [
 			...availableResources.global.map((r: { name: string }) => r.name),
 			...availableResources.custom.map((r: { name: string }) => r.name)
@@ -194,11 +193,15 @@ export const ask = action({
 			if (!instance.sandboxId) {
 				return { ok: false as const, error: 'Instance does not have a sandbox' };
 			}
-			const wakeResult = await ctx.runAction(instanceActions.wake, { instanceId });
+			// Pass projectId to wake so it uses project-specific resources
+			const wakeResult = await ctx.runAction(instanceActions.wake, { instanceId, projectId });
 			serverUrl = wakeResult.serverUrl;
 			if (!serverUrl) {
 				return { ok: false as const, error: 'Failed to wake instance' };
 			}
+		} else {
+			// Sandbox is already running - sync project-specific resources and reload config
+			await ctx.runAction(internal.instances.actions.syncResources, { instanceId, projectId });
 		}
 
 		// Pass project name to sandbox for future project-aware directory structure
@@ -261,7 +264,7 @@ type ListResourcesResult =
  * List available resources for MCP - authenticated via API key
  *
  * @param project - Optional project name. Defaults to "default" for backward compatibility.
- *                  Currently returns instance-level resources; project-scoped resources come in Phase 5.
+ *                  Returns resources specific to the given project.
  */
 export const listResources = action({
 	args: {
@@ -287,7 +290,7 @@ export const listResources = action({
 		})
 	),
 	handler: async (ctx, args): Promise<ListResourcesResult> => {
-		const { apiKey } = args;
+		const { apiKey, project: projectName } = args;
 
 		// Validate API key with Clerk
 		const validation = (await ctx.runAction(api.clerkApiKeys.validate, {
@@ -299,9 +302,13 @@ export const listResources = action({
 
 		const instanceId = validation.instanceId;
 
-		// For now, resources are at instance level (backward compatible)
-		// In Phase 5, this will be updated to filter by project
-		const { custom } = await ctx.runQuery(internal.resources.listAvailableInternal, { instanceId });
+		// Get or create the project
+		const projectId = await getOrCreateProject(ctx, instanceId, projectName);
+
+		// Return project-specific resources
+		const { custom } = await ctx.runQuery(internal.resources.listAvailableForProject, {
+			projectId
+		});
 
 		return { ok: true as const, resources: custom };
 	}
@@ -562,6 +569,7 @@ export const sync = action({
 						// Update the resource
 						await ctx.runMutation(internal.mcpInternal.updateResourceInternal, {
 							instanceId,
+							projectId,
 							name: localResource.name,
 							url: localResource.url,
 							branch: localResource.branch,

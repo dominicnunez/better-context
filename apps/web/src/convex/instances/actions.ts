@@ -110,11 +110,15 @@ function parseVersion(output: string): string | undefined {
 
 async function getResourceConfigs(
 	ctx: ActionCtx,
-	instanceId: Id<'instances'>
+	instanceId: Id<'instances'>,
+	projectId?: Id<'projects'>
 ): Promise<ResourceConfig[]> {
-	const resources = await ctx.runQuery(internal.resources.listAvailableInternal, {
-		instanceId
-	});
+	// If projectId is provided, get project-specific resources
+	// Otherwise fall back to instance-level resources (for backwards compatibility)
+	const resources = projectId
+		? await ctx.runQuery(internal.resources.listAvailableForProject, { projectId })
+		: await ctx.runQuery(internal.resources.listAvailableInternal, { instanceId });
+
 	const merged = new Map<string, ResourceConfig>();
 	for (const resource of [...resources.global, ...resources.custom]) {
 		merged.set(resource.name, {
@@ -306,9 +310,12 @@ export const provision = action({
 });
 
 export const wake = action({
-	args: instanceArgs,
+	args: {
+		instanceId: v.id('instances'),
+		projectId: v.optional(v.id('projects'))
+	},
 	returns: v.object({ serverUrl: v.string() }),
-	handler: async (ctx, args) => wakeInstanceInternal(ctx, args.instanceId)
+	handler: async (ctx, args) => wakeInstanceInternal(ctx, args.instanceId, args.projectId)
 });
 
 export const stop = action({
@@ -461,7 +468,8 @@ async function createSandboxFromScratch(
 
 async function wakeInstanceInternal(
 	ctx: ActionCtx,
-	instanceId: Id<'instances'>
+	instanceId: Id<'instances'>,
+	projectId?: Id<'projects'>
 ): Promise<{ serverUrl: string }> {
 	const instance = await requireInstance(ctx, instanceId);
 	const wakeStartedAt = Date.now();
@@ -489,7 +497,8 @@ async function wakeInstanceInternal(
 			serverUrl = result.serverUrl;
 			sandboxId = result.sandbox.id;
 		} else {
-			const resources = await getResourceConfigs(ctx, instanceId);
+			// Use project-specific resources if projectId is provided
+			const resources = await getResourceConfigs(ctx, instanceId, projectId);
 			const daytona = getDaytona();
 			const sandbox = await daytona.get(instance.sandboxId);
 
@@ -736,16 +745,20 @@ export const resetMyInstance = action({
 });
 
 export const syncResources = internalAction({
-	args: instanceArgs,
+	args: {
+		instanceId: v.id('instances'),
+		projectId: v.optional(v.id('projects'))
+	},
 	returns: v.object({ synced: v.boolean() }),
 	handler: async (ctx, args): Promise<{ synced: boolean }> => {
 		const instance = await requireInstance(ctx, args.instanceId);
-		if (!instance.sandboxId || instance.state !== 'running') {
+		if (!instance.sandboxId || instance.state !== 'running' || !instance.serverUrl) {
 			return { synced: false };
 		}
 
 		try {
-			const resources = await getResourceConfigs(ctx, args.instanceId);
+			// Get project-specific resources if projectId is provided
+			const resources = await getResourceConfigs(ctx, args.instanceId, args.projectId);
 			const daytona = getDaytona();
 			const sandbox = await daytona.get(instance.sandboxId);
 
@@ -753,7 +766,20 @@ export const syncResources = internalAction({
 				return { synced: false };
 			}
 
+			// Upload the config and reload the server
 			await uploadBtcaConfig(sandbox, resources);
+
+			// Tell the btca server to reload its config
+			const reloadResponse = await fetch(`${instance.serverUrl}/reload-config`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' }
+			});
+
+			if (!reloadResponse.ok) {
+				console.error('Failed to reload config:', await reloadResponse.text());
+				return { synced: false };
+			}
+
 			return { synced: true };
 		} catch (error) {
 			console.error('Failed to sync resources:', getErrorMessage(error));

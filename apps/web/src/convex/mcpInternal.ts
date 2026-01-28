@@ -72,18 +72,18 @@ export const addResourceInternal = internalMutation({
 	},
 	returns: v.id('userResources'),
 	handler: async (ctx, args): Promise<Id<'userResources'>> => {
-		// Check if resource with this name already exists for this instance using compound index
+		// Check if resource with this name already exists for this project using compound index
 		const existing = await ctx.db
 			.query('userResources')
-			.withIndex('by_instance_and_name', (q) =>
-				q.eq('instanceId', args.instanceId).eq('name', args.name)
+			.withIndex('by_project_and_name', (q) =>
+				q.eq('projectId', args.projectId).eq('name', args.name)
 			)
 			.first();
 
 		if (existing) {
 			throw new ConvexError({
 				code: 'ALREADY_EXISTS',
-				message: `Resource "${args.name}" already exists`
+				message: `Resource "${args.name}" already exists in this project`
 			});
 		}
 
@@ -107,6 +107,7 @@ export const addResourceInternal = internalMutation({
 export const updateResourceInternal = internalMutation({
 	args: {
 		instanceId: v.id('instances'),
+		projectId: v.id('projects'),
 		name: v.string(),
 		url: v.string(),
 		branch: v.string(),
@@ -115,16 +116,19 @@ export const updateResourceInternal = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		// Use compound index for efficient lookup
+		// Use compound index for efficient lookup by project
 		const existing = await ctx.db
 			.query('userResources')
-			.withIndex('by_instance_and_name', (q) =>
-				q.eq('instanceId', args.instanceId).eq('name', args.name)
+			.withIndex('by_project_and_name', (q) =>
+				q.eq('projectId', args.projectId).eq('name', args.name)
 			)
 			.first();
 
 		if (!existing) {
-			throw new ConvexError({ code: 'NOT_FOUND', message: `Resource "${args.name}" not found` });
+			throw new ConvexError({
+				code: 'NOT_FOUND',
+				message: `Resource "${args.name}" not found in this project`
+			});
 		}
 
 		await ctx.db.patch(existing._id, {

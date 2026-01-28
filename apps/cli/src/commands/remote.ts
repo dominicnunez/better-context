@@ -465,7 +465,7 @@ async function addRemoteResourceWizard(url: string): Promise<void> {
 
 			config = {
 				project: projectName,
-				model: 'claude-sonnet',
+				model: 'claude-haiku',
 				resources: []
 			};
 		}
