@@ -118,7 +118,8 @@ export default defineSchema({
 		createdAt: v.number()
 	})
 		.index('by_instance', ['instanceId'])
-		.index('by_project', ['projectId']),
+		.index('by_project', ['projectId'])
+		.index('by_instance_and_name', ['instanceId', 'name']),
 
 	threads: defineTable({
 		instanceId: v.id('instances'),
@@ -156,7 +157,8 @@ export default defineSchema({
 		.index('by_thread', ['threadId'])
 		.index('by_message', ['messageId'])
 		.index('by_session', ['sessionId'])
-		.index('by_status', ['status']),
+		.index('by_status', ['status'])
+		.index('by_thread_and_status', ['threadId', 'status']),
 
 	mcpQuestions: defineTable({
 		projectId: v.id('projects'),
