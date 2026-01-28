@@ -6,9 +6,15 @@ import { Transaction } from '../context/transaction.ts';
 import { CommonHints, getErrorHint, getErrorMessage } from '../errors.ts';
 import { Metrics } from '../metrics/index.ts';
 import { Resources } from '../resources/service.ts';
+import { isGitResource } from '../resources/schema.ts';
 import { FS_RESOURCE_SYSTEM_NOTE, type BtcaFsResource } from '../resources/types.ts';
 import { CollectionError, getCollectionKey, type CollectionResult } from './types.ts';
 import { VirtualFs } from '../vfs/virtual-fs.ts';
+import {
+	clearVirtualCollectionMetadata,
+	setVirtualCollectionMetadata,
+	type VirtualResourceMetadata
+} from './virtual-metadata.ts';
 
 export namespace Collections {
 	export type Service = {
@@ -33,6 +39,48 @@ export namespace Collections {
 		return lines.join('\n');
 	};
 
+	const getGitHeadHash = async (resourcePath: string) => {
+		try {
+			const proc = Bun.spawn(['git', 'rev-parse', 'HEAD'], {
+				cwd: resourcePath,
+				stdout: 'pipe',
+				stderr: 'pipe'
+			});
+			const stdout = await new Response(proc.stdout).text();
+			const exitCode = await proc.exited;
+			if (exitCode !== 0) return undefined;
+			const trimmed = stdout.trim();
+			return trimmed.length > 0 ? trimmed : undefined;
+		} catch {
+			return undefined;
+		}
+	};
+
+	const buildVirtualMetadata = async (args: {
+		resource: BtcaFsResource;
+		resourcePath: string;
+		loadedAt: string;
+		definition?: ReturnType<Config.Service['getResource']>;
+	}) => {
+		if (!args.definition) return null;
+		const base = {
+			name: args.resource.name,
+			fsName: args.resource.fsName,
+			type: args.resource.type,
+			path: args.resourcePath,
+			repoSubPaths: args.resource.repoSubPaths,
+			loadedAt: args.loadedAt
+		};
+		if (!isGitResource(args.definition)) return base;
+		const commit = await getGitHeadHash(args.resourcePath);
+		return {
+			...base,
+			url: args.definition.url,
+			branch: args.definition.branch,
+			commit
+		};
+	};
+
 	export const create = (args: {
 		config: Config.Service;
 		resources: Resources.Service;
@@ -52,18 +100,22 @@ export namespace Collections {
 					const sortedNames = [...uniqueNames].sort((a, b) => a.localeCompare(b));
 					const key = getCollectionKey(sortedNames);
 					const isVirtual = args.config.virtualizeResources;
-					const collectionPath = isVirtual
-						? path.posix.join('/collections', key)
-						: path.join(args.config.collectionsDirectory, key);
+					const collectionPath = isVirtual ? '/' : path.join(args.config.collectionsDirectory, key);
+					const vfsId = isVirtual ? VirtualFs.create() : undefined;
+					const cleanupVirtual = () => {
+						if (!vfsId) return;
+						VirtualFs.dispose(vfsId);
+						clearVirtualCollectionMetadata(vfsId);
+					};
 
 					if (isVirtual) {
 						try {
-							await VirtualFs.mkdir('/collections', { recursive: true });
-							await VirtualFs.mkdir('/resources', { recursive: true });
-							await VirtualFs.mkdir(collectionPath, { recursive: true });
+							// Virtual collections use the VFS root as the collection root.
+							await VirtualFs.mkdir(collectionPath, { recursive: true }, vfsId);
 						} catch (cause) {
+							cleanupVirtual();
 							throw new CollectionError({
-								message: `Failed to create virtual collection directory: "${collectionPath}"`,
+								message: `Failed to initialize virtual collection root: "${collectionPath}"`,
 								hint: 'Check that the virtual filesystem is available.',
 								cause
 							});
@@ -81,6 +133,8 @@ export namespace Collections {
 					}
 
 					const loadedResources: BtcaFsResource[] = [];
+					const metadataResources: VirtualResourceMetadata[] = [];
+					const loadedAt = new Date().toISOString();
 					for (const name of sortedNames) {
 						try {
 							loadedResources.push(await args.resources.load(name, { quiet }));
@@ -88,6 +142,7 @@ export namespace Collections {
 							// Preserve the hint from the underlying error if available
 							const underlyingHint = getErrorHint(cause);
 							const underlyingMessage = getErrorMessage(cause);
+							cleanupVirtual();
 							throw new CollectionError({
 								message: `Failed to load resource "${name}": ${underlyingMessage}`,
 								hint:
@@ -103,6 +158,7 @@ export namespace Collections {
 						try {
 							resourcePath = await resource.getAbsoluteDirectoryPath();
 						} catch (cause) {
+							cleanupVirtual();
 							throw new CollectionError({
 								message: `Failed to get path for resource "${resource.name}"`,
 								hint: CommonHints.CLEAR_CACHE,
@@ -111,9 +167,9 @@ export namespace Collections {
 						}
 
 						if (isVirtual) {
-							const virtualResourcePath = path.posix.join('/resources', resource.fsName);
+							const virtualResourcePath = path.posix.join('/', resource.fsName);
 							try {
-								await VirtualFs.rm(virtualResourcePath, { recursive: true, force: true });
+								await VirtualFs.rm(virtualResourcePath, { recursive: true, force: true }, vfsId);
 							} catch {
 								// ignore
 							}
@@ -121,6 +177,7 @@ export namespace Collections {
 								await VirtualFs.importDirectoryFromDisk({
 									sourcePath: resourcePath,
 									destinationPath: virtualResourcePath,
+									vfsId,
 									ignore: (relativePath) => {
 										const normalized = relativePath.split(path.sep).join('/');
 										return (
@@ -131,6 +188,7 @@ export namespace Collections {
 									}
 								});
 							} catch (cause) {
+								cleanupVirtual();
 								throw new CollectionError({
 									message: `Failed to virtualize resource "${resource.name}"`,
 									hint: CommonHints.CLEAR_CACHE,
@@ -138,21 +196,14 @@ export namespace Collections {
 								});
 							}
 
-							const linkPath = path.posix.join(collectionPath, resource.fsName);
-							try {
-								await VirtualFs.rm(linkPath, { recursive: true, force: true });
-							} catch {
-								// ignore
-							}
-							try {
-								await VirtualFs.symlink(virtualResourcePath, linkPath);
-							} catch (cause) {
-								throw new CollectionError({
-									message: `Failed to create virtual symlink for resource "${resource.name}"`,
-									hint: 'This may be a virtual filesystem permissions issue.',
-									cause
-								});
-							}
+							const definition = args.config.getResource(resource.name);
+							const metadata = await buildVirtualMetadata({
+								resource,
+								resourcePath,
+								loadedAt,
+								definition
+							});
+							if (metadata) metadataResources.push(metadata);
 						} else {
 							const linkPath = path.join(collectionPath, resource.fsName);
 							try {
@@ -172,12 +223,22 @@ export namespace Collections {
 						}
 					}
 
+					if (vfsId) {
+						setVirtualCollectionMetadata({
+							vfsId,
+							collectionKey: key,
+							createdAt: loadedAt,
+							resources: metadataResources
+						});
+					}
+
 					const instructionBlocks = loadedResources.map(createCollectionInstructionBlock);
 
 					return {
 						path: collectionPath,
 						agentInstructions: instructionBlocks.join('\n\n'),
-						mode: isVirtual ? 'virtual' : 'fs'
+						mode: isVirtual ? 'virtual' : 'fs',
+						vfsId
 					};
 				})
 		};

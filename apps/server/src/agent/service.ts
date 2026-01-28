@@ -14,6 +14,8 @@ import { CommonHints, type TaggedErrorOptions } from '../errors.ts';
 import { Metrics } from '../metrics/index.ts';
 import { Auth, getSupportedProviders } from '../providers/index.ts';
 import type { CollectionResult } from '../collections/types.ts';
+import { clearVirtualCollectionMetadata } from '../collections/virtual-metadata.ts';
+import { VirtualFs } from '../vfs/virtual-fs.ts';
 import type { AgentResult, TrackedInstance, InstanceInfo } from './types.ts';
 import { AgentLoop } from './loop.ts';
 
@@ -272,10 +274,17 @@ export namespace Agent {
 				questionLength: question.length
 			});
 
+			const cleanup = () => {
+				if (!collection.vfsId) return;
+				VirtualFs.dispose(collection.vfsId);
+				clearVirtualCollectionMetadata(collection.vfsId);
+			};
+
 			// Validate provider is authenticated
 			const isAuthed = await Auth.isAuthenticated(config.provider);
 			if (!isAuthed && config.provider !== 'opencode') {
 				const authenticated = await Auth.getAuthenticatedProviders();
+				cleanup();
 				throw new ProviderNotConnectedError({
 					providerId: config.provider,
 					connectedProviders: authenticated
@@ -283,14 +292,24 @@ export namespace Agent {
 			}
 
 			// Create a generator that wraps the AgentLoop stream
-			const eventGenerator = AgentLoop.stream({
-				providerId: config.provider,
-				modelId: config.model,
-				collectionPath: collection.path,
-				collectionMode: collection.mode,
-				agentInstructions: collection.agentInstructions,
-				question
-			});
+			const eventGenerator = (async function* () {
+				try {
+					const stream = AgentLoop.stream({
+						providerId: config.provider,
+						modelId: config.model,
+						collectionPath: collection.path,
+						collectionMode: collection.mode,
+						vfsId: collection.vfsId,
+						agentInstructions: collection.agentInstructions,
+						question
+					});
+					for await (const event of stream) {
+						yield event;
+					}
+				} finally {
+					cleanup();
+				}
+			})();
 
 			return {
 				stream: eventGenerator,
@@ -308,10 +327,17 @@ export namespace Agent {
 				questionLength: question.length
 			});
 
+			const cleanup = () => {
+				if (!collection.vfsId) return;
+				VirtualFs.dispose(collection.vfsId);
+				clearVirtualCollectionMetadata(collection.vfsId);
+			};
+
 			// Validate provider is authenticated
 			const isAuthed = await Auth.isAuthenticated(config.provider);
 			if (!isAuthed && config.provider !== 'opencode') {
 				const authenticated = await Auth.getAuthenticatedProviders();
+				cleanup();
 				throw new ProviderNotConnectedError({
 					providerId: config.provider,
 					connectedProviders: authenticated
@@ -324,6 +350,7 @@ export namespace Agent {
 					modelId: config.model,
 					collectionPath: collection.path,
 					collectionMode: collection.mode,
+					vfsId: collection.vfsId,
 					agentInstructions: collection.agentInstructions,
 					question
 				});
@@ -347,6 +374,8 @@ export namespace Agent {
 					hint: 'This may be a temporary issue. Try running the command again.',
 					cause: error
 				});
+			} finally {
+				cleanup();
 			}
 		};
 

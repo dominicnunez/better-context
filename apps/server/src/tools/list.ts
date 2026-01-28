@@ -41,7 +41,7 @@ export namespace ListTool {
 	 * Execute the list tool
 	 */
 	export async function execute(params: ParametersType, context: ToolContext): Promise<Result> {
-		const { basePath } = context;
+		const { basePath, vfsId } = context;
 		const mode = context.mode ?? 'fs';
 
 		// Resolve path within sandbox
@@ -53,7 +53,7 @@ export namespace ListTool {
 		// Check if path exists
 		try {
 			if (mode === 'virtual') {
-				const stats = await VirtualFs.stat(resolvedPath);
+				const stats = await VirtualFs.stat(resolvedPath, vfsId);
 				if (!stats.isDirectory) {
 					return {
 						title: params.path,
@@ -95,7 +95,7 @@ export namespace ListTool {
 		const entries: Entry[] = [];
 
 		if (mode === 'virtual') {
-			const dirents = await VirtualFs.readdir(resolvedPath);
+			const dirents = await VirtualFs.readdir(resolvedPath, vfsId);
 			for (const dirent of dirents) {
 				let type: Entry['type'] = 'other';
 				let size: number | undefined;
@@ -104,7 +104,7 @@ export namespace ListTool {
 				} else if (dirent.isFile) {
 					type = 'file';
 					try {
-						const stats = await VirtualFs.stat(path.posix.join(resolvedPath, dirent.name));
+						const stats = await VirtualFs.stat(path.posix.join(resolvedPath, dirent.name), vfsId);
 						size = stats.size;
 					} catch {
 						// Ignore stat errors

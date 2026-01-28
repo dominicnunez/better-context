@@ -46,48 +46,49 @@ export namespace VirtualSandbox {
 
 	export async function resolvePathWithSymlinks(
 		basePath: string,
-		requestedPath: string
-	): Promise<string> {
+		requestedPath: string,
+		vfsId?: string
+	) {
 		const resolved = resolvePath(basePath, requestedPath);
 		try {
-			return await VirtualFs.realpath(resolved);
+			return await VirtualFs.realpath(resolved, vfsId);
 		} catch {
 			return resolved;
 		}
 	}
 
-	export async function exists(basePath: string, requestedPath: string): Promise<boolean> {
+	export async function exists(basePath: string, requestedPath: string, vfsId?: string) {
 		try {
 			const resolved = resolvePath(basePath, requestedPath);
-			return await VirtualFs.exists(resolved);
+			return await VirtualFs.exists(resolved, vfsId);
 		} catch {
 			return false;
 		}
 	}
 
-	export async function isDirectory(basePath: string, requestedPath: string): Promise<boolean> {
+	export async function isDirectory(basePath: string, requestedPath: string, vfsId?: string) {
 		try {
 			const resolved = resolvePath(basePath, requestedPath);
-			const stats = await VirtualFs.stat(resolved);
+			const stats = await VirtualFs.stat(resolved, vfsId);
 			return stats.isDirectory;
 		} catch {
 			return false;
 		}
 	}
 
-	export async function isFile(basePath: string, requestedPath: string): Promise<boolean> {
+	export async function isFile(basePath: string, requestedPath: string, vfsId?: string) {
 		try {
 			const resolved = resolvePath(basePath, requestedPath);
-			const stats = await VirtualFs.stat(resolved);
+			const stats = await VirtualFs.stat(resolved, vfsId);
 			return stats.isFile;
 		} catch {
 			return false;
 		}
 	}
 
-	export async function validatePath(basePath: string, requestedPath: string): Promise<string> {
+	export async function validatePath(basePath: string, requestedPath: string, vfsId?: string) {
 		const resolved = resolvePath(basePath, requestedPath);
-		if (!(await VirtualFs.exists(resolved))) {
+		if (!(await VirtualFs.exists(resolved, vfsId))) {
 			throw new PathNotFoundError(requestedPath);
 		}
 		return resolved;

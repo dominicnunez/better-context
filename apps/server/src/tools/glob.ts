@@ -43,7 +43,7 @@ export namespace GlobTool {
 	 * Execute the glob tool
 	 */
 	export async function execute(params: ParametersType, context: ToolContext): Promise<Result> {
-		const { basePath } = context;
+		const { basePath, vfsId } = context;
 		const mode = context.mode ?? 'fs';
 
 		// Resolve search path within sandbox
@@ -56,7 +56,7 @@ export namespace GlobTool {
 		// Validate the search path exists and is a directory
 		try {
 			if (mode === 'virtual') {
-				const stats = await VirtualFs.stat(searchPath);
+				const stats = await VirtualFs.stat(searchPath, vfsId);
 				if (!stats.isDirectory) {
 					return {
 						title: params.pattern,
@@ -97,7 +97,7 @@ export namespace GlobTool {
 
 		if (mode === 'virtual') {
 			const patternRegex = globToRegExp(params.pattern);
-			const allFiles = await VirtualFs.listFilesRecursive(searchPath);
+			const allFiles = await VirtualFs.listFilesRecursive(searchPath, vfsId);
 			for (const file of allFiles) {
 				if (files.length >= MAX_RESULTS) {
 					truncated = true;
@@ -106,7 +106,7 @@ export namespace GlobTool {
 				const relative = path.posix.relative(searchPath, file);
 				if (!patternRegex.test(relative)) continue;
 				try {
-					const stats = await VirtualFs.stat(file);
+					const stats = await VirtualFs.stat(file, vfsId);
 					files.push({ path: file, mtime: stats.mtimeMs });
 				} catch {
 					files.push({ path: file, mtime: 0 });

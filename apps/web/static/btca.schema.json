@@ -31,7 +31,7 @@
 		},
 		"virtualizeResources": {
 			"type": "boolean",
-			"description": "Load resources into an in-memory virtual filesystem for tool access",
+			"description": "Load resources into an in-memory virtual filesystem rooted at /, with each resource mounted at /<resourceName>",
 			"default": false
 		},
 		"resources": {

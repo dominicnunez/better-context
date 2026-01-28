@@ -46,7 +46,7 @@ export namespace GrepTool {
 	 * Execute the grep tool
 	 */
 	export async function execute(params: ParametersType, context: ToolContext): Promise<Result> {
-		const { basePath } = context;
+		const { basePath, vfsId } = context;
 		const mode = context.mode ?? 'fs';
 
 		// Resolve search path within sandbox
@@ -59,7 +59,7 @@ export namespace GrepTool {
 		// Validate the search path exists and is a directory
 		try {
 			if (mode === 'virtual') {
-				const stats = await VirtualFs.stat(searchPath);
+				const stats = await VirtualFs.stat(searchPath, vfsId);
 				if (!stats.isDirectory) {
 					return {
 						title: params.pattern,
@@ -115,7 +115,7 @@ export namespace GrepTool {
 			}
 
 			const includeMatcher = params.include ? buildIncludeMatcher(params.include) : null;
-			const allFiles = await VirtualFs.listFilesRecursive(searchPath);
+			const allFiles = await VirtualFs.listFilesRecursive(searchPath, vfsId);
 			const results: Array<{ path: string; lineNumber: number; lineText: string; mtime: number }> =
 				[];
 
@@ -125,16 +125,16 @@ export namespace GrepTool {
 				if (includeMatcher && !includeMatcher(relative)) continue;
 				let buffer: Uint8Array;
 				try {
-					buffer = await VirtualFs.readFileBuffer(filePath);
+					buffer = await VirtualFs.readFileBuffer(filePath, vfsId);
 				} catch {
 					continue;
 				}
 				if (isBinaryBuffer(buffer)) continue;
-				const text = await VirtualFs.readFile(filePath);
+				const text = await VirtualFs.readFile(filePath, vfsId);
 				const lines = text.split('\n');
 				let mtime = 0;
 				try {
-					mtime = (await VirtualFs.stat(filePath)).mtimeMs;
+					mtime = (await VirtualFs.stat(filePath, vfsId)).mtimeMs;
 				} catch {
 					mtime = 0;
 				}

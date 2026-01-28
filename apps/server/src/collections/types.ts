@@ -5,6 +5,7 @@ export type CollectionResult = {
 	path: string;
 	agentInstructions: string;
 	mode: 'fs' | 'virtual';
+	vfsId?: string;
 };
 
 export class CollectionError extends Error {

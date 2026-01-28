@@ -543,6 +543,10 @@ Location: Project root or `~/.config/btca/btca.config.jsonc` (global)
 	// "local" = .btca/ in project, "global" = ~/.local/share/btca/
 	"dataDirectory": ".btca",
 
+	// Load resources into an in-memory virtual filesystem rooted at /
+	// Each resource is mounted at /<resourceName>
+	"virtualizeResources": true,
+
 	// Resources available in this project
 	"resources": [
 		{
