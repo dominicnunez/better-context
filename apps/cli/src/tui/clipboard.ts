@@ -1,9 +1,19 @@
 import { spawn } from 'bun';
+import { release } from 'os';
 
-function isWSL(): boolean {
+async function isWSL(): Promise<boolean> {
 	try {
-		const release = require('os').release().toLowerCase();
-		return release.includes('microsoft') || release.includes('wsl');
+		const osRelease = release().toLowerCase();
+		if (osRelease.includes('microsoft') || osRelease.includes('wsl')) {
+			return true;
+		}
+
+		const procVersion = Bun.file('/proc/version');
+		if (await procVersion.exists()) {
+			const content = await procVersion.text();
+			return content.toLowerCase().includes('microsoft');
+		}
+		return false;
 	} catch {
 		return false;
 	}
@@ -17,7 +27,7 @@ export async function copyToClipboard(text: string): Promise<void> {
 		proc.stdin.write(text);
 		proc.stdin.end();
 		await proc.exited;
-	} else if (platform === 'win32' || isWSL()) {
+	} else if (platform === 'win32' || (await isWSL())) {
 		const proc = spawn(['clip.exe'], { stdin: 'pipe' });
 		proc.stdin.write(text);
 		proc.stdin.end();
