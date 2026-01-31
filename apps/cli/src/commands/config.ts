@@ -117,11 +117,9 @@ const modelCommand = new Command('model')
 					return;
 				}
 				if (!providers.connected.includes(result.provider)) {
-					const hint =
-						result.provider === 'cursor'
-							? 'Run "cursor-agent login" or set CURSOR_API_KEY to authenticate.'
-							: 'Run "opencode auth" to configure credentials.';
-					console.warn(`Warning: Provider "${result.provider}" is not connected. ${hint}`);
+					console.warn(
+						`Warning: Provider "${result.provider}" is not connected. Run "opencode auth" to configure credentials.`
+					);
 					return;
 				}
 				const modelIds = Object.keys(provider.models ?? {});
