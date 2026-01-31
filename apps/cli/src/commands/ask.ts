@@ -95,8 +95,13 @@ export const askCommand = new Command('ask')
 	.description('Ask a question about configured resources')
 	.requiredOption('-q, --question <text>', 'Question to ask')
 	.option('-r, --resource <name...>', 'Resources to search (can specify multiple)')
+	.option('--no-thinking', 'Hide reasoning output')
+	.option('--no-tools', 'Hide tool-call traces')
+	.option('--sub-agent', 'Emit clean output (no reasoning or tool traces)')
 	.action(async (options, command) => {
 		const globalOpts = command.parent?.opts() as { server?: string; port?: number } | undefined;
+		const showThinking = options.subAgent ? false : (options.thinking ?? true);
+		const showTools = options.subAgent ? false : (options.tools ?? true);
 
 		// Check for deprecated -t flag usage (not registered, but might be in user's muscle memory)
 		const rawArgs = process.argv;
@@ -158,6 +163,7 @@ export const askCommand = new Command('ask')
 						}
 					},
 					onReasoningDelta: (delta) => {
+						if (!showThinking) return;
 						if (!inReasoning) {
 							process.stdout.write('<thinking>\n');
 							inReasoning = true;
@@ -177,6 +183,7 @@ export const askCommand = new Command('ask')
 							process.stdout.write('\n</thinking>\n\n');
 							inReasoning = false;
 						}
+						if (!showTools) return;
 						if (hasText) {
 							process.stdout.write('\n');
 						}

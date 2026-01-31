@@ -46,6 +46,9 @@ Options:
 
 - `-r, --resource <name...>` - Resources to search (can specify multiple)
 - `-q, --question <text>` - Question to ask (required)
+- `--no-thinking` - Hide reasoning output
+- `--no-tools` - Hide tool-call traces
+- `--sub-agent` - Emit clean output (no reasoning or tool traces)
 
 Examples:
 

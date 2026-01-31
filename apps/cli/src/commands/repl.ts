@@ -9,6 +9,9 @@ type ResourceInfo = { name: string; type: string; url?: string };
 export interface ReplOptions {
 	server?: string;
 	port?: number;
+	thinking?: boolean;
+	tools?: boolean;
+	subAgent?: boolean;
 }
 
 /**
@@ -126,6 +129,8 @@ async function prompt(message: string): Promise<string | null> {
  */
 export async function launchRepl(options: ReplOptions): Promise<void> {
 	let server: ServerManager | null = null;
+	const showThinking = options.subAgent ? false : (options.thinking ?? true);
+	const showTools = options.subAgent ? false : (options.tools ?? true);
 
 	const result = await Result.tryPromise(async () => {
 		server = await ensureServer({
@@ -248,6 +253,7 @@ Examples:
 				for await (const event of parseSSEStream(response)) {
 					handleStreamEvent(event, {
 						onReasoningDelta: (delta) => {
+							if (!showThinking) return;
 							if (!inReasoning) {
 								process.stdout.write('<thinking>\n');
 								inReasoning = true;
@@ -267,6 +273,7 @@ Examples:
 								process.stdout.write('\n</thinking>\n\n');
 								inReasoning = false;
 							}
+							if (!showTools) return;
 							if (hasText) process.stdout.write('\n');
 							console.log(`[${tool}]`);
 						},
