@@ -7,13 +7,13 @@
 
 ## P0/P1 Fix Now
 ### Implementation TODOs (P0/P1)
-- [ ] #140 add structured error reporting and surface instance start errors with retry
-- [ ] #101 verify linux-arm64 artifact is published; add prepublish artifact check
-- [ ] #135/#121 refine @mention parsing to ignore non-resource @ tokens; close dup
-- [ ] #138 detect WSL and use clip.exe for clipboard
-- [ ] #90 normalize Windows paths (WSL drive mapping) before validation
-- [ ] #124 strip echoed prompt during streaming to avoid UI flash
-- [ ] #136 remove hover translateY flicker (use shadow/overlay)
+- [x] #140 add structured error reporting and surface instance start errors with retry
+- [x] #101 verify linux-arm64 artifact is published; add prepublish artifact check
+- [x] #135/#121 refine @mention parsing to ignore non-resource @ tokens; close dup
+- [x] #138 detect WSL and use clip.exe for clipboard
+- [x] #90 normalize Windows paths (WSL drive mapping) before validation
+- [x] #124 strip echoed prompt during streaming to avoid UI flash
+- [x] #136 remove hover translateY flicker (use shadow/overlay)
 
 1) #140 Web Instance unable to start (P0)
    - Add structured error reporting in `apps/web/src/convex/instances/actions.ts` and surface a clear UI error + retry.
