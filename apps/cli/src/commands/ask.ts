@@ -23,13 +23,13 @@ function formatError(error: unknown): string {
  * Extract potential @mentions from query string (without modifying the query yet)
  */
 function extractMentions(query: string): string[] {
-	const mentionRegex = /@([A-Za-z0-9@._/-]+)/g;
+	const mentionRegex = /(^|[^\w@])@([A-Za-z0-9._/-]+)/g;
 	const mentions: string[] = [];
 	let match;
 
 	while ((match = mentionRegex.exec(query)) !== null) {
-		if (match[1]) {
-			mentions.push(match[1]);
+		if (match[2]) {
+			mentions.push(match[2]);
 		}
 	}
 
@@ -42,8 +42,8 @@ function extractMentions(query: string): string[] {
 function cleanQueryOfValidResources(query: string, validResources: string[]): string {
 	const validSet = new Set(validResources.map((r) => r.toLowerCase()));
 	return query
-		.replace(/@([A-Za-z0-9@._/-]+)/g, (match, mention) => {
-			return validSet.has(mention.toLowerCase()) ? '' : match;
+		.replace(/(^|[^\w@])@([A-Za-z0-9._/-]+)/g, (match, prefix, mention) => {
+			return validSet.has(mention.toLowerCase()) ? prefix : match;
 		})
 		.replace(/\s+/g, ' ')
 		.trim();

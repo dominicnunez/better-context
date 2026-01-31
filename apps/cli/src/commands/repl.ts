@@ -29,11 +29,11 @@ function formatError(error: unknown): string {
  * Extract @mentions from input
  */
 function extractMentions(input: string): string[] {
-	const mentionRegex = /@([A-Za-z0-9@._/-]+)/g;
+	const mentionRegex = /(^|[^\w@])@([A-Za-z0-9._/-]+)/g;
 	const mentions: string[] = [];
 	let match;
 	while ((match = mentionRegex.exec(input)) !== null) {
-		if (match[1]) mentions.push(match[1]);
+		if (match[2]) mentions.push(match[2]);
 	}
 	return mentions;
 }
@@ -44,8 +44,8 @@ function extractMentions(input: string): string[] {
 function cleanInput(input: string, validResources: string[]): string {
 	const validSet = new Set(validResources.map((r) => r.toLowerCase()));
 	return input
-		.replace(/@([A-Za-z0-9@._/-]+)/g, (match, mention) => {
-			return validSet.has(mention.toLowerCase()) ? '' : match;
+		.replace(/(^|[^\w@])@([A-Za-z0-9._/-]+)/g, (match, prefix, mention) => {
+			return validSet.has(mention.toLowerCase()) ? prefix : match;
 		})
 		.replace(/\s+/g, ' ')
 		.trim();
@@ -208,18 +208,10 @@ Examples:
 			// Extract @mentions from input
 			const mentions = extractMentions(input);
 			const validNewResources: string[] = [];
-			const invalidResources: string[] = [];
 
 			for (const mention of mentions) {
 				const resolved = resolveResourceName(mention, resources);
 				if (resolved) validNewResources.push(resolved);
-				else invalidResources.push(mention);
-			}
-
-			if (invalidResources.length > 0) {
-				console.log(`Unknown resource(s): ${invalidResources.join(', ')}`);
-				console.log(`Available: ${resources.map((r) => r.name).join(', ')}`);
-				continue;
 			}
 
 			// Accumulate resources
