@@ -41,7 +41,7 @@
 				<div class="flex flex-col gap-3 text-base bc-prose">
 					<div class="flex items-center gap-3">
 						<span class="size-2 bg-[color:hsl(var(--bc-fg))]"></span>
-						<span>Subcommands: ask · chat · serve · open</span>
+						<span>Subcommands: ask · serve · open</span>
 					</div>
 					<div class="flex items-center gap-3">
 						<span class="size-2 bg-[color:hsl(var(--bc-fg))]"></span>

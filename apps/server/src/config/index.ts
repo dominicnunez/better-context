@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { CommonHints, type TaggedErrorOptions } from '../errors.ts';
 import { Metrics } from '../metrics/index.ts';
+import { getSupportedProviders, isProviderSupported } from '../providers/index.ts';
 import { ResourceDefinitionSchema, type ResourceDefinition } from '../resources/schema.ts';
 
 export const GLOBAL_CONFIG_DIR = '~/.config/btca';
@@ -621,6 +622,13 @@ export namespace Config {
 			getResource: (name: string) => getMergedResources().find((r) => r.name === name),
 
 			updateModel: async (provider: string, model: string) => {
+				if (!isProviderSupported(provider)) {
+					const available = getSupportedProviders();
+					throw new ConfigError({
+						message: `Provider "${provider}" is not supported`,
+						hint: `Available providers: ${available.join(', ')}. Open an issue to request this provider: https://github.com/davis7dotsh/better-context/issues.`
+					});
+				}
 				const mutableConfig = getMutableConfig();
 				const updated = { ...mutableConfig, provider, model };
 				setMutableConfig(updated);

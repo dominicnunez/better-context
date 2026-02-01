@@ -23,13 +23,13 @@ It ships:
 - Ask a question:
   - `btca ask --resource svelte --question 'How do runes work in Svelte 5?'`
 - Run the interactive TUI:
-  - `btca chat`
+  - `btca`
 - Print config path:
   - `btca config`
 
 ## Command reference (CLI)
 
-- `btca` (no args): print version info.
+- `btca` (no args): launch the interactive TUI.
 - `btca --help`: show help.
 - `btca --version` / `btca -v`: print version.
 
@@ -37,9 +37,6 @@ It ships:
   - Ask one question and stream the answer.
   - `--resource` can be repeated for multiple resources.
   - Supports @mentions in the question to specify resources.
-
-- `btca chat [--resource <resource>...]`
-  - Launch the interactive TUI for multi-turn conversation.
 
 - `btca config`
   - Prints the config file path and available subcommands.

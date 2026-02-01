@@ -27,13 +27,7 @@ btca ask -q "@svelte @tailwind How do I style components?"
 
 ### Interactive Mode
 
-Start a chat session for deeper exploration:
-
-```bash
-btca chat -r svelte -r effect
-```
-
-Or use the TUI:
+Use the TUI for deeper exploration:
 
 ```bash
 btca

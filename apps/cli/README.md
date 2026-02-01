@@ -63,14 +63,6 @@ btca ask --resource react --resource typescript --question "How do I type useSta
 btca ask --question "@svelte @tailwind How do I style components?"
 ```
 
-### OpenCode TUI Session
-
-Start an interactive OpenCode session with resource context:
-
-```bash
-btca chat --resource svelte --resource effect
-```
-
 ### Start Server
 
 Start the btca server and keep it running to handle HTTP requests:
@@ -93,24 +85,6 @@ btca uses a config file at `~/.config/btca/btca.config.jsonc`. Manage configurat
 
 ```bash
 btca config model --provider opencode --model claude-haiku-4-5
-```
-
-#### Cursor CLI Provider
-
-To use Cursor's CLI /ask mode:
-
-```bash
-cursor-agent login
-# or set CURSOR_API_KEY in your environment
-
-btca connect
-# choose "Cursor CLI (ask mode)" when prompted
-```
-
-You can also set it directly:
-
-```bash
-btca config model --provider cursor --model <cursor-model-id>
 ```
 
 ### List Resources
