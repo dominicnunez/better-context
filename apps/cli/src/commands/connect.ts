@@ -7,53 +7,12 @@ import { ensureServer } from '../server/manager.ts';
 import { createClient, getProviders, updateModel, BtcaError } from '../client/index.ts';
 import { dim, green } from '../lib/utils/colors.ts';
 import { loginOpenAIOAuth, saveProviderApiKey } from '../lib/opencode-oauth.ts';
-
-const CURATED_MODELS: Record<string, { id: string; label: string }[]> = {
-	openai: [{ id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' }],
-	opencode: [
-		{ id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-		{ id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-		{ id: 'gemini-3-flash', label: 'Gemini 3 Flash' },
-		{ id: 'glm-4.7', label: 'GLM 4.7' },
-		{ id: 'kimi-k2.5', label: 'Kimi K2.5' },
-		{ id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' }
-	],
-	openrouter: [
-		{ id: 'anthropic/claude-haiku-4.5', label: 'Anthropic Claude Haiku 4.5' },
-		{ id: 'openai/gpt-5.2-codex', label: 'OpenAI GPT-5.2 Codex' },
-		{ id: 'minimax/minimax-m2.1', label: 'MiniMax M2.1' },
-		{ id: 'moonshotai/kimi-k2.5', label: 'Moonshot Kimi K2.5' }
-	],
-	anthropic: [
-		{ id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (2025-10-01)' },
-		{ id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5 (2025-09-29)' }
-	],
-	google: [{ id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }]
-};
-
-// Provider display info
-const PROVIDER_INFO: Record<string, { label: string; requiresAuth: boolean }> = {
-	opencode: { label: 'OpenCode Zen', requiresAuth: true },
-	anthropic: { label: 'Anthropic (Claude)', requiresAuth: true },
-	openai: { label: 'OpenAI (GPT)', requiresAuth: true },
-	google: { label: 'Google (Gemini)', requiresAuth: true },
-	openrouter: { label: 'OpenRouter', requiresAuth: true }
-};
-
-const PROVIDER_AUTH_GUIDANCE: Record<string, string> = {
-	openai: 'OpenAI requires OAuth: btca will open a browser to sign in.',
-	anthropic: 'Anthropic uses API keys: paste your API key to continue.',
-	google: 'Google uses API keys: paste your API key to continue.',
-	openrouter: 'OpenRouter uses API keys: paste your API key to continue.',
-	opencode: 'OpenCode uses API keys: paste your API key to continue.'
-};
-
-const PROVIDER_SETUP_LINKS: Record<string, { label: string; url: string }> = {
-	opencode: { label: 'Get OpenCode Zen API key', url: 'https://opencode.ai/zen' },
-	openrouter: { label: 'Get OpenRouter API key', url: 'https://openrouter.ai/settings/keys' },
-	google: { label: 'Get Google API key', url: 'https://aistudio.google.com/api-keys' },
-	anthropic: { label: 'Get Anthropic API key', url: 'https://platform.claude.com/dashboard' }
-};
+import {
+	CURATED_MODELS,
+	PROVIDER_AUTH_GUIDANCE,
+	PROVIDER_INFO,
+	PROVIDER_SETUP_LINKS
+} from '../connect/constants.ts';
 
 /**
  * Format an error for display, including hint if available.

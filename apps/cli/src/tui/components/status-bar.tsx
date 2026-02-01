@@ -28,15 +28,21 @@ export const StatusBar: Component<StatusBarProps> = (props) => {
 		}
 
 		// Wizard-specific help
-		if (props.activeWizard === 'blessed-model') {
-			return ' [Up/Down] Navigate  [Enter] Select  [Esc] Cancel';
-		}
-
 		if (props.activeWizard === 'add-repo') {
 			if (props.wizardStep === 'confirm') {
 				return ' [Enter] Get config snippet  [Esc] Cancel';
 			}
 			return ' [Enter] Next step  [Esc] Cancel';
+		}
+
+		if (props.activeWizard === 'connect') {
+			if (props.wizardStep === 'api-key' || props.wizardStep === 'model-input') {
+				return ' [Enter] Submit  [Esc] Cancel';
+			}
+			if (props.wizardStep === 'auth') {
+				return ' Waiting for authentication... [Esc] Cancel';
+			}
+			return ' [Up/Down] Navigate  [Enter] Select  [Esc] Cancel';
 		}
 
 		if (props.cursorIn === 'command') {

@@ -5,6 +5,7 @@ import {
 	createClient,
 	getConfig,
 	getResources,
+	getProviders as getProvidersClient,
 	askQuestionStream,
 	updateModel as updateModelClient,
 	addResource as addResourceClient,
@@ -59,6 +60,14 @@ export const services = {
 		const client = createClient(getServerUrl());
 		const config = await getConfig(client);
 		return { provider: config.provider, model: config.model };
+	},
+
+	/**
+	 * Get provider connection status
+	 */
+	getProviders: async () => {
+		const client = createClient(getServerUrl());
+		return getProvidersClient(client);
 	},
 
 	/**

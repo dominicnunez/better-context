@@ -8,7 +8,7 @@ import { MainInput } from './main-input.tsx';
 import { StatusBar } from './status-bar.tsx';
 import { CommandPalette } from './command-palette.tsx';
 import { RepoMentionPalette } from './repo-mention-palette.tsx';
-import { BlessedModelSelect } from './blessed-model-select.tsx';
+import { ConnectWizard } from './connect-wizard.tsx';
 import { AddResourceWizard } from './add-resource-wizard.tsx';
 import { ResumeThreadModal } from './resume-thread-modal.tsx';
 import { inputHistory } from '../history.ts';
@@ -130,8 +130,9 @@ export const InputSection: Component = () => {
 	const handleCommandExecute = (command: { mode: string }) => {
 		setInputState([]);
 		switch (command.mode) {
-			case 'select-blessed-model':
-				setActiveWizard('blessed-model');
+			case 'connect':
+				setActiveWizard('connect');
+				setCurrentWizardStep('provider');
 				break;
 			case 'add-repo':
 				setActiveWizard('add-repo');
@@ -259,8 +260,8 @@ export const InputSection: Component = () => {
 			</Show>
 
 			{/* Wizards */}
-			<Show when={activeWizard() === 'blessed-model'}>
-				<BlessedModelSelect onClose={closeWizard} />
+			<Show when={activeWizard() === 'connect'}>
+				<ConnectWizard onClose={closeWizard} onStepChange={setCurrentWizardStep} />
 			</Show>
 			<Show when={activeWizard() === 'add-repo'}>
 				<AddResourceWizard onClose={closeWizard} onStepChange={setCurrentWizardStep} />

@@ -2,9 +2,9 @@ import type { Command } from './types.ts';
 
 export const COMMANDS: Command[] = [
 	{
-		name: 'model',
-		description: 'Select from recommended models',
-		mode: 'select-blessed-model'
+		name: 'connect',
+		description: 'Configure provider and model',
+		mode: 'connect'
 	},
 	{
 		name: 'add',
