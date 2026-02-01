@@ -15,12 +15,12 @@
 	const shikiTheme = $derived(themeStore.theme === 'dark' ? 'dark-plus' : 'light-plus');
 
 	// Step 1: Install
-	const INSTALL_CMD = `bun add -g btca opencode-ai`;
+	const INSTALL_CMD = `bun add -g btca`;
 
 	// Step 2: Provider setup (show recommended model)
 	const recommendedModel =
 		BLESSED_MODELS.find((m) => m.model === 'claude-haiku-4-5') ?? BLESSED_MODELS[0];
-	const MODEL_CMD = `btca config model --provider ${recommendedModel.provider} --model ${recommendedModel.model}`;
+	const CONNECT_CMD = 'btca connect';
 
 	// Step 3: Agent setup prompt - extract detailed instructions from the markdown file
 	// (everything after "## Detailed Instructions")
@@ -77,14 +77,13 @@
 				{/if}
 			</div>
 			<div class="bc-kicker">
-				<span>Install btca & OpenCode</span>
+				<span>Install btca</span>
 			</div>
 		</button>
 
 		<div class="mt-4 ml-14">
 			<p class="max-w-2xl text-sm bc-prose">
-				Install both <code class="bc-inlineCode">btca</code> and
-				<code class="bc-inlineCode">opencode-ai</code> globally. btca uses OpenCode's SDK for AI completions.
+				Install <code class="bc-inlineCode">btca</code> globally.
 			</p>
 
 			<div class="mt-4 bc-card bc-ring p-5">
@@ -140,7 +139,8 @@
 
 		<div class="mt-4 ml-14">
 			<p class="max-w-2xl text-sm bc-prose">
-				btca uses the OpenCode SDK for AI completions. The easiest way to get started is with
+				Run <code class="bc-inlineCode">btca connect</code> to authenticate a provider and pick a
+				default model. We recommend
 				<a
 					href={recommendedModel.providerSetupUrl}
 					target="_blank"
@@ -148,7 +148,8 @@
 					class="text-[color:hsl(var(--bc-accent))]"
 				>
 					OpenCode Zen
-				</a>, which provides access to multiple models with a single API key.
+				</a>
+				for access to multiple models with one API key.
 			</p>
 
 			<div class="mt-4 bc-card bc-ring bc-cardHover p-5">
@@ -164,17 +165,17 @@
 					<div class="flex items-center justify-between gap-3 p-4">
 						<div class="min-w-0 flex-1 overflow-x-auto">
 							{#if shikiStore.highlighter}
-								{@html shikiStore.highlighter.codeToHtml(MODEL_CMD, {
+								{@html shikiStore.highlighter.codeToHtml(CONNECT_CMD, {
 									theme: shikiTheme,
 									lang: 'bash',
 									rootStyle: 'background-color: transparent; padding: 0; margin: 0;'
 								})}
 							{:else}
-								<pre class="m-0 whitespace-pre text-sm leading-relaxed"><code>{MODEL_CMD}</code
+								<pre class="m-0 whitespace-pre text-sm leading-relaxed"><code>{CONNECT_CMD}</code
 									></pre>
 							{/if}
 						</div>
-						<CopyButton text={MODEL_CMD} label="Copy command" />
+						<CopyButton text={CONNECT_CMD} label="Copy command" />
 					</div>
 				</div>
 
@@ -190,7 +191,7 @@
 			</div>
 
 			<p class="mt-4 text-sm bc-prose">
-				See <a href="/config#models" class="text-[color:hsl(var(--bc-accent))]">all models</a> for Anthropic,
+				See <a href="/cli#models" class="text-[color:hsl(var(--bc-accent))]">all models</a> for Anthropic,
 				OpenAI, Google, OpenRouter, and OpenCode options.
 			</p>
 		</div>
