@@ -19,7 +19,6 @@ const DEFAULT_PROVIDER = 'opencode';
 const BTCA_SERVER_SESSION = 'btca-server-session';
 const BTCA_SERVER_LOG_PATH = '/tmp/btca-server.log';
 const BTCA_PACKAGE_NAME = 'btca@latest';
-const OPENCODE_PACKAGE_NAME = 'opencode-ai@latest';
 
 const instanceArgs = { instanceId: v.id('instances') };
 
@@ -34,7 +33,6 @@ type ResourceConfig = {
 
 type InstalledVersions = {
 	btcaVersion?: string;
-	opencodeVersion?: string;
 };
 
 let daytonaInstance: Daytona | null = null;
@@ -299,19 +297,15 @@ async function ensureSandboxStarted(sandbox: Sandbox): Promise<boolean> {
 }
 
 async function getInstalledVersions(sandbox: Sandbox): Promise<InstalledVersions> {
-	const [btcaResult, opencodeResult] = await Promise.all([
-		sandbox.process.executeCommand('btca --version'),
-		sandbox.process.executeCommand('opencode --version')
-	]);
+	const btcaResult = await sandbox.process.executeCommand('btca --version');
 
 	return {
-		btcaVersion: parseVersion(btcaResult.result),
-		opencodeVersion: parseVersion(opencodeResult.result)
+		btcaVersion: parseVersion(btcaResult.result)
 	};
 }
 
 async function updatePackages(sandbox: Sandbox): Promise<void> {
-	await sandbox.process.executeCommand(`bun add -g ${BTCA_PACKAGE_NAME} ${OPENCODE_PACKAGE_NAME}`);
+	await sandbox.process.executeCommand(`bun add -g ${BTCA_PACKAGE_NAME}`);
 }
 
 async function fetchLatestVersion(packageName: string): Promise<string | undefined> {
@@ -378,8 +372,7 @@ export const provision = action({
 			await ctx.runMutation(instanceMutations.setProvisioned, {
 				instanceId: args.instanceId,
 				sandboxId: createdSandbox.id,
-				btcaVersion: versions.btcaVersion,
-				opencodeVersion: versions.opencodeVersion
+				btcaVersion: versions.btcaVersion
 			});
 			await ctx.runMutation(instanceMutations.touchActivity, {
 				instanceId: args.instanceId
@@ -398,8 +391,7 @@ export const provision = action({
 					instanceId: args.instanceId,
 					sandboxId: sandbox.id,
 					durationMs,
-					btcaVersion: versions.btcaVersion,
-					opencodeVersion: versions.opencodeVersion
+					btcaVersion: versions.btcaVersion
 				}
 			});
 
@@ -481,31 +473,24 @@ export const checkVersions = action({
 	args: instanceArgs,
 	returns: v.object({
 		latestBtca: v.optional(v.string()),
-		latestOpencode: v.optional(v.string()),
 		updateAvailable: v.boolean()
 	}),
 	handler: async (ctx, args) => {
 		const instance = await requireInstance(ctx, args.instanceId);
-		const [latestBtca, latestOpencode] = await Promise.all([
-			fetchLatestVersion(BTCA_PACKAGE_NAME),
-			fetchLatestVersion(OPENCODE_PACKAGE_NAME)
-		]);
+		const latestBtca = await fetchLatestVersion(BTCA_PACKAGE_NAME);
 
 		await ctx.runMutation(instanceMutations.setVersions, {
 			instanceId: args.instanceId,
 			latestBtcaVersion: latestBtca,
-			latestOpencodeVersion: latestOpencode,
 			lastVersionCheck: Date.now()
 		});
 
 		const updateAvailable = Boolean(
-			(latestBtca && instance.btcaVersion && latestBtca !== instance.btcaVersion) ||
-			(latestOpencode && instance.opencodeVersion && latestOpencode !== instance.opencodeVersion)
+			latestBtca && instance.btcaVersion && latestBtca !== instance.btcaVersion
 		);
 
 		return {
 			latestBtca,
-			latestOpencode,
 			updateAvailable
 		};
 	}
@@ -597,8 +582,7 @@ async function createSandboxFromScratch(
 	await ctx.runMutation(instanceMutations.setProvisioned, {
 		instanceId,
 		sandboxId: sandbox.id,
-		btcaVersion: versions.btcaVersion,
-		opencodeVersion: versions.opencodeVersion
+		btcaVersion: versions.btcaVersion
 	});
 
 	await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
@@ -608,7 +592,6 @@ async function createSandboxFromScratch(
 			instanceId,
 			sandboxId: sandbox.id,
 			btcaVersion: versions.btcaVersion,
-			opencodeVersion: versions.opencodeVersion,
 			createdDuringWake: true
 		}
 	});
@@ -754,9 +737,7 @@ async function updateInstanceInternal(
 		await ctx.runMutation(instanceMutations.setVersions, {
 			instanceId,
 			btcaVersion: versions.btcaVersion,
-			opencodeVersion: versions.opencodeVersion,
 			latestBtcaVersion: versions.btcaVersion,
-			latestOpencodeVersion: versions.opencodeVersion,
 			lastVersionCheck: Date.now()
 		});
 		await ctx.runMutation(instanceMutations.touchActivity, { instanceId });
@@ -767,8 +748,7 @@ async function updateInstanceInternal(
 			properties: {
 				instanceId,
 				sandboxId: instance.sandboxId,
-				btcaVersion: versions.btcaVersion,
-				opencodeVersion: versions.opencodeVersion
+				btcaVersion: versions.btcaVersion
 			}
 		});
 

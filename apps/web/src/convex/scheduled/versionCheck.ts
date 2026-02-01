@@ -8,46 +8,39 @@ import { instances, scheduled } from '../apiHelpers.js';
 const instanceMutations = instances.mutations;
 
 const BTCA_PACKAGE_NAME = 'btca';
-const OPENCODE_PACKAGE_NAME = 'opencode-ai';
 
 type VersionCheckResult = {
 	checked: number;
 	latestBtca: string | undefined;
-	latestOpencode: string | undefined;
 };
 
 export const checkVersions = internalAction({
 	args: {},
 	handler: async (ctx): Promise<VersionCheckResult> => {
-		const [latestBtca, latestOpencode] = await Promise.all([
-			fetchLatestVersion(BTCA_PACKAGE_NAME),
-			fetchLatestVersion(OPENCODE_PACKAGE_NAME)
-		]);
+		const latestBtca = await fetchLatestVersion(BTCA_PACKAGE_NAME);
 
-		if (!latestBtca && !latestOpencode) {
+		if (!latestBtca) {
 			console.error('Scheduled version check failed to fetch latest versions');
-			return { checked: 0, latestBtca, latestOpencode };
+			return { checked: 0, latestBtca };
 		}
 
 		const instances = await ctx.runQuery(scheduled.queries.listInstances, {});
 		for (const instance of instances) {
-			await updateInstance(ctx, instance, latestBtca, latestOpencode);
+			await updateInstance(ctx, instance, latestBtca);
 		}
-		return { checked: instances.length, latestBtca, latestOpencode };
+		return { checked: instances.length, latestBtca };
 	}
 });
 
 async function updateInstance(
 	ctx: ActionCtx,
 	instance: Doc<'instances'>,
-	latestBtca?: string,
-	latestOpencode?: string
+	latestBtca?: string
 ): Promise<void> {
 	try {
 		await ctx.runMutation(instanceMutations.setVersions, {
 			instanceId: instance._id,
 			latestBtcaVersion: latestBtca,
-			latestOpencodeVersion: latestOpencode,
 			lastVersionCheck: Date.now()
 		});
 	} catch (error) {
