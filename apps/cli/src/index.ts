@@ -2,7 +2,6 @@ import { Result } from 'better-result';
 import { Command } from 'commander';
 import { addCommand } from './commands/add.ts';
 import { askCommand } from './commands/ask.ts';
-import { chatCommand } from './commands/chat.ts';
 import { clearCommand } from './commands/clear.ts';
 import { connectCommand } from './commands/connect.ts';
 import { disconnectCommand } from './commands/disconnect.ts';
@@ -41,7 +40,6 @@ program.addCommand(removeCommand);
 
 // Query commands
 program.addCommand(askCommand);
-program.addCommand(chatCommand);
 
 // Configuration commands
 program.addCommand(connectCommand);

@@ -22,11 +22,6 @@
 			example: 'btca ask --resource svelte --question "How does $state work?"'
 		},
 		{
-			name: 'btca chat',
-			description: 'Open a TUI session with saved history.',
-			example: 'btca chat --resource svelte'
-		},
-		{
 			name: 'btca serve',
 			description: 'Start the local server for HTTP requests.',
 			example: 'btca serve --port 3000'

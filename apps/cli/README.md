@@ -63,14 +63,6 @@ btca ask --resource react --resource typescript --question "How do I type useSta
 btca ask --question "@svelte @tailwind How do I style components?"
 ```
 
-### OpenCode TUI Session
-
-Start an interactive OpenCode session with resource context:
-
-```bash
-btca chat --resource svelte --resource effect
-```
-
 ### Start Server
 
 Start the btca server and keep it running to handle HTTP requests:

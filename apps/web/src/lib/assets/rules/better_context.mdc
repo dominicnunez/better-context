@@ -48,9 +48,6 @@ btca queries local clones of library/framework repositories to answer questions 
   - `--resource` can be repeated for multiple resources.
   - Supports @mentions in the question to specify resources.
 
-- `btca chat [--resource <resource>...]`
-  - Launch the interactive TUI for multi-turn conversation.
-
 ```bash
 # Single resource
 btca ask -r svelte -q "How does the $state rune work?"
@@ -142,16 +139,6 @@ Clear all locally cloned git repositories (frees disk space, forces fresh clone 
 
 ```bash
 btca clear
-```
-
----
-
-### `btca chat`
-
-Start an interactive OpenCode TUI session. Requires `opencode` CLI installed.
-
-```bash
-btca chat -r <resource...>
 ```
 
 ---
