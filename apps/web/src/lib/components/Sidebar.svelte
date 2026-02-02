@@ -5,6 +5,7 @@
 		Check,
 		ChevronDown,
 		FolderOpen,
+		LifeBuoy,
 		Loader2,
 		MessageSquare,
 		Moon,
@@ -335,6 +336,17 @@
 					<div
 						class="bc-card bc-sidebar-dropdown absolute bottom-full left-0 right-0 mb-2 p-2 text-xs"
 					>
+						<a
+							href="/app/support"
+							class="bc-sidebar-menu-item"
+							onclick={() => {
+								showUserMenu = false;
+								handleNavigate();
+							}}
+						>
+							<LifeBuoy size={14} />
+							Support
+						</a>
 						<a
 							href="/app/settings"
 							class="bc-sidebar-menu-item"
