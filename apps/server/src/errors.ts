@@ -67,7 +67,6 @@ export const CommonHints = {
 		'Ensure you have access to the repository. Private repos require authentication.',
 	RUN_AUTH:
 		'Run "opencode auth" in your opencode instance to configure provider credentials. btca uses opencode for AI queries.',
-	LIST_RESOURCES: 'Run "btca config resources" to see available resources.',
-	ADD_RESOURCE:
-		'Add a resource with "btca config add-resource -t git -n <name> -u <url>" or edit your config file.'
+	LIST_RESOURCES: 'Run "btca resources" to see available resources.',
+	ADD_RESOURCE: 'Add a resource with "btca add <url>" or edit your config file.'
 } as const;

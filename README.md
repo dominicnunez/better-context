@@ -10,7 +10,7 @@ Ask your AI agent questions about libraries and frameworks by searching the actu
 
 ```bash
 bun add -g btca opencode-ai
-btca config model --provider opencode --model claude-haiku-4-5
+btca connect --provider opencode --model claude-haiku-4-5
 ```
 
 ## Usage

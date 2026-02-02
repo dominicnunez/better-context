@@ -7,10 +7,13 @@ import { connectCommand } from './commands/connect.ts';
 import { disconnectCommand } from './commands/disconnect.ts';
 import { initCommand } from './commands/init.ts';
 import { removeCommand } from './commands/remove.ts';
+import { resourcesCommand } from './commands/resources.ts';
 import { remoteCommand } from './commands/remote.ts';
 import { serveCommand } from './commands/serve.ts';
+import { telemetryCommand } from './commands/telemetry.ts';
 import { launchTui } from './commands/tui.ts';
 import { launchRepl } from './commands/repl.ts';
+import { setTelemetryContext } from './lib/telemetry.ts';
 import packageJson from '../package.json';
 
 // Version is injected at build time via Bun's define option
@@ -18,6 +21,7 @@ import packageJson from '../package.json';
 // Falls back to package.json for dev mode, or 0.0.0 if unavailable
 declare const __VERSION__: string;
 const VERSION = typeof __VERSION__ !== 'undefined' ? __VERSION__ : (packageJson.version ?? '0.0.0');
+setTelemetryContext({ cliVersion: VERSION });
 
 const program = new Command()
 	.name('btca')
@@ -37,6 +41,7 @@ const program = new Command()
 // Resource management commands
 program.addCommand(addCommand);
 program.addCommand(removeCommand);
+program.addCommand(resourcesCommand);
 
 // Query commands
 program.addCommand(askCommand);
@@ -52,6 +57,7 @@ program.addCommand(serveCommand);
 
 // Remote mode commands
 program.addCommand(remoteCommand);
+program.addCommand(telemetryCommand);
 
 // Default action (no subcommand) → launch TUI or REPL
 program.action(

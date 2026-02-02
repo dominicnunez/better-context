@@ -40,7 +40,7 @@ Run:
 
 Available resources: svelte, effect`;
 
-	const RESOURCE_ADD_CMD = `btca config resources add -n effect -t git -u https://github.com/Effect-TS/effect -b main`;
+	const RESOURCE_ADD_CMD = `btca add -n effect -t git -u https://github.com/Effect-TS/effect -b main`;
 
 	const PROVIDER_AUTH = [
 		{

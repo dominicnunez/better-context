@@ -1,8 +1,15 @@
 import { Result } from 'better-result';
-import { ensureServer, type ServerManager } from '../server/manager.ts';
-import { createClient, getResources, askQuestionStream, BtcaError } from '../client/index.ts';
-import { parseSSEStream } from '../client/stream.ts';
 import type { BtcaStreamEvent } from 'btca-server/stream/types';
+import { ensureServer, type ServerManager } from '../server/manager.ts';
+import {
+	createClient,
+	getConfig,
+	getResources,
+	askQuestionStream,
+	BtcaError
+} from '../client/index.ts';
+import { parseSSEStream } from '../client/stream.ts';
+import { setTelemetryContext, trackTelemetryEvent } from '../lib/telemetry.ts';
 
 type ResourceInfo = { name: string; type: string; url?: string };
 
@@ -143,11 +150,21 @@ export async function launchRepl(options: ReplOptions): Promise<void> {
 		const activeServer = server;
 
 		const client = createClient(server.url);
-		const { resources } = await getResources(client);
+		const [config, resourcesResult] = await Promise.all([getConfig(client), getResources(client)]);
+		setTelemetryContext({ provider: config.provider, model: config.model });
+		await trackTelemetryEvent({
+			event: 'cli_started',
+			properties: { command: 'btca', mode: 'repl' }
+		});
+		await trackTelemetryEvent({
+			event: 'cli_repl_started',
+			properties: { command: 'btca', mode: 'repl' }
+		});
+		const { resources } = resourcesResult;
 
 		if (resources.length === 0) {
 			console.error('Error: No resources configured.');
-			console.error('Add resources to your btca config file.');
+			console.error('Add resources with "btca add" or check "btca resources".');
 			process.exit(1);
 		}
 

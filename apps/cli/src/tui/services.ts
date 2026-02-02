@@ -14,6 +14,7 @@ import {
 } from '../client/index.ts';
 import { parseSSEStream } from '../client/stream.ts';
 import type { Repo, BtcaChunk } from './types.ts';
+import { trackTelemetryEvent } from '../lib/telemetry.ts';
 
 // Get server URL from global (set by TUI launcher)
 const getServerUrl = (): string => {
@@ -119,6 +120,10 @@ export const services = {
 		if (currentAbortController) {
 			currentAbortController.abort();
 			currentAbortController = null;
+			await trackTelemetryEvent({
+				event: 'cli_stream_cancelled',
+				properties: { command: 'btca', mode: 'tui' }
+			});
 		}
 	},
 
