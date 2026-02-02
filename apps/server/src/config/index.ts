@@ -643,7 +643,7 @@ export namespace Config {
 				if (mergedResources.some((r) => r.name === resource.name)) {
 					throw new ConfigError({
 						message: `Resource "${resource.name}" already exists`,
-						hint: `Choose a different name or remove the existing resource first with "btca config remove-resource -n ${resource.name}".`
+						hint: `Choose a different name or remove the existing resource first with "btca remove ${resource.name}".`
 					});
 				}
 

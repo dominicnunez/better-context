@@ -20,25 +20,25 @@
 			example: 'btca serve --port 3000'
 		},
 		{
-			name: 'btca config model',
+			name: 'btca connect',
 			description: 'Set the AI model and provider.',
-			example: 'btca config model --provider opencode --model claude-haiku-4-5'
+			example: 'btca connect --provider opencode --model claude-haiku-4-5'
 		},
 		{
-			name: 'btca config resources list',
+			name: 'btca resources',
 			description: 'List all configured resources.',
-			example: 'btca config resources list'
+			example: 'btca resources'
 		},
 		{
-			name: 'btca config resources add',
+			name: 'btca add',
 			description: 'Add a new git repository as a resource.',
 			example:
-				'btca config resources add --name effect --type git --url https://github.com/Effect-TS/effect --branch main'
+				'btca add --name effect --type git --url https://github.com/Effect-TS/effect --branch main'
 		},
 		{
-			name: 'btca config resources remove',
+			name: 'btca remove',
 			description: 'Remove a resource from the configuration.',
-			example: 'btca config resources remove --name effect'
+			example: 'btca remove effect'
 		},
 		{
 			name: 'btca clear',

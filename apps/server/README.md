@@ -110,14 +110,6 @@ POST /question/stream
 
 Ask a question with streaming SSE response.
 
-### OpenCode Instance
-
-```
-POST /opencode
-```
-
-Get an OpenCode instance URL for a collection of resources.
-
 ### Model Configuration
 
 ```

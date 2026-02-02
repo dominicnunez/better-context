@@ -24,8 +24,6 @@ It ships:
   - `btca ask --resource svelte --question 'How do runes work in Svelte 5?'`
 - Run the interactive TUI:
   - `btca`
-- Print config path:
-  - `btca config`
 
 ## Command reference (CLI)
 
@@ -38,45 +36,29 @@ It ships:
   - `--resource` can be repeated for multiple resources.
   - Supports @mentions in the question to specify resources.
 
-- `btca config`
-  - Prints the config file path and available subcommands.
-
-- `btca config model`
-  - Show current provider/model.
-- `btca config model --provider <provider> --model <model>`
-  - Set provider/model (both must be provided together).
-
-- `btca config resources list`
+- `btca resources`
   - List configured resources.
-- `btca config resources add --name <name> --type <type> [--url <url>] [--branch <branch>] [--path <path>] [--notes '<specialNotes>'] [--search-path '<path>']`
+
+- `btca connect`
+  - Configure provider/model interactively or via flags.
+
+- `btca add --name <name> --type <type> [--url <url>] [--branch <branch>] [--path <path>] [--notes '<specialNotes>'] [--search-path '<path>']`
   - Add a resource. Type is `git` (default) or `local`.
   - Git resources require `--url <url>`, optional `--branch <branch>` (default: main).
   - Local resources require `--path <path>`.
-- `btca config resources remove [--name <name>]`
+- `btca remove [name]`
   - Remove a resource from config (with confirmation).
 
-- `btca config collections list`
-  - List all indexed collections.
-- `btca config collections clear [--key <key>]`
-  - Clear all collections, or a specific one with `--key`.
-
-- `btca config threads list`
-  - List conversation threads.
-- `btca config threads delete [--id <id>]`
-  - Delete a thread.
+- `btca clear`
+  - Clear all locally cloned resources.
+- `btca serve --port <port>`
+  - Start the local server.
 
 ## Command reference (built-in TUI)
 
 In the TUI you typically:
 - Ask: `@resource Your question here`
-- Use slash commands (via `/`):
-  - `/add` (resource wizard)
-  - `/remove` (remove resource from config)
-  - `/model` (pick a recommended model)
-  - `/custom` (set custom provider/model)
-  - `/clear` (clear chat history)
-
-The TUI streams the answer and copies it to your clipboard on completion.
+- Use the command palette for: connect, add, clear, resume
 
 ## Configuration (`~/.config/btca/btca.json`)
 

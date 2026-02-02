@@ -108,7 +108,7 @@ export const InputSection: Component = () => {
 		}
 		if (invalidRepos.length > 0) {
 			messages.addSystemMessage(
-				`Repo(s) not found: ${invalidRepos.join(', ')}. Configure resources in your btca config.`
+				`Repo(s) not found: ${invalidRepos.join(', ')}. Configure resources with "btca add".`
 			);
 			return;
 		}

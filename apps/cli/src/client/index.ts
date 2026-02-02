@@ -103,30 +103,6 @@ export async function askQuestion(
 }
 
 /**
- * Get OpenCode instance URL for a collection
- */
-export async function getOpencodeInstance(
-	client: Client,
-	options: {
-		resources?: string[];
-		quiet?: boolean;
-	}
-) {
-	const res = await client.opencode.$post({
-		json: {
-			resources: options.resources,
-			quiet: options.quiet
-		}
-	});
-
-	if (!res.ok) {
-		throw await parseErrorResponse(res, `Failed to get opencode instance: ${res.status}`);
-	}
-
-	return res.json();
-}
-
-/**
  * Ask a question (streaming) - returns the raw Response for SSE parsing
  */
 export async function askQuestionStream(

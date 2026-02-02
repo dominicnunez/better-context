@@ -84,32 +84,32 @@ btca uses a config file at `~/.config/btca/btca.config.jsonc`. Manage configurat
 ### Set Model
 
 ```bash
-btca config model --provider opencode --model claude-haiku-4-5
+btca connect --provider opencode --model claude-haiku-4-5
 ```
 
 ### List Resources
 
 ```bash
-btca config resources list
+btca resources
 ```
 
 ### Add Resource
 
 ```bash
 # Add a git repository
-btca config resources add --name effect --type git --url https://github.com/Effect-TS/effect --branch main
+btca add --name effect --type git --url https://github.com/Effect-TS/effect --branch main
 
 # Add with search path (focus on specific subdirectory)
-btca config resources add --name svelte --type git --url https://github.com/sveltejs/svelte.dev --branch main --search-path apps/svelte.dev
+btca add --name svelte --type git --url https://github.com/sveltejs/svelte.dev --branch main --search-path apps/svelte.dev
 
 # Add a local directory
-btca config resources add --name myproject --type local --path /path/to/project
+btca add --name myproject --type local --path /path/to/project
 ```
 
 ### Remove Resource
 
 ```bash
-btca config resources remove --name effect
+btca remove effect
 ```
 
 ### Clear Cached Resources

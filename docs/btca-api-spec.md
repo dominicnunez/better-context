@@ -202,7 +202,11 @@ Options:
 - `-g, --global` — (flag exists; not implemented as a strict global override)
 
 
-### 4.5 `btca ask`
+### 4.5 `btca resources`
+List all configured resources.
+
+
+### 4.6 `btca ask`
 Ask a one‑shot question with streaming output.
 
 Options:
@@ -217,7 +221,7 @@ Behavior:
 - Uses `/question/stream` SSE endpoint.
 
 
-### 4.6 `btca connect`
+### 4.7 `btca connect`
 Configure provider + model.
 
 Options:
@@ -231,7 +235,7 @@ Behavior:
 - Prompts for auth if required.
 
 
-### 4.7 `btca disconnect`
+### 4.8 `btca disconnect`
 Disconnect provider credentials.
 
 Options:
@@ -241,7 +245,7 @@ Behavior:
 - If omitted, interactive picker.
 
 
-### 4.8 `btca init`
+### 4.9 `btca init`
 Project setup wizard.
 
 Options:
@@ -259,27 +263,16 @@ Behavior:
   - Writes `.claude/skills/btca-local/SKILL.md`
 
 
-### 4.9 `btca clear`
+### 4.10 `btca clear`
 Clears all locally cloned resources.
 
 
-### 4.10 `btca serve`
+### 4.11 `btca serve`
 Starts local server.
 
 Options:
 - `-p, --port <port>` (default `8080`)
 
-
-### 4.11 `btca config …` (exists but not registered)
-There is an unregistered command group (`btca config`) in code:
-- `btca config model --provider <id> --model <id>`
-- `btca config resources list`
-- `btca config resources add ...`
-- `btca config resources remove ...`
-
-This group is **not wired into the CLI entrypoint**, so it is currently **not accessible**.
-
----
 
 ## 5. CLI Spec (Remote)
 
@@ -485,54 +478,7 @@ Request: same as `/question`.
 Response: SSE event stream (see §7).
 
 
-### 6.8 `POST /opencode`
-Returns an OpenCode instance URL for a resource collection.
-
-Request:
-```json
-{ "resources": ["svelte"], "quiet": true }
-```
-
-Response:
-```json
-{
-  "url": "http://127.0.0.1:12345",
-  "model": { "provider": "opencode", "model": "claude-haiku-4-5" },
-  "instanceId": "uuid",
-  "resources": ["svelte"],
-  "collection": { "key": "svelte", "path": "/abs/path/collection" }
-}
-```
-
-
-### 6.9 `GET /opencode/instances`
-Lists active OpenCode instances.
-
-Response:
-```json
-{ "instances": [{ "id": "uuid", "createdAt": 0, "lastActivity": 0, "collectionPath": "...", "url": "..." }], "count": 1 }
-```
-
-
-### 6.10 `DELETE /opencode/instances`
-Closes all active instances.
-
-Response:
-```json
-{ "closed": 2 }
-```
-
-
-### 6.11 `DELETE /opencode/:id`
-Closes a single instance.
-
-Response:
-```json
-{ "closed": true, "instanceId": "uuid" }
-```
-
-
-### 6.12 `PUT /config/model`
+### 6.8 `PUT /config/model`
 Updates provider/model.
 
 Request:
@@ -546,7 +492,7 @@ Response:
 ```
 
 
-### 6.13 `POST /config/resources`
+### 6.9 `POST /config/resources`
 Adds a new resource.
 
 Request (git):
@@ -569,7 +515,7 @@ Request (local):
 Response: the created resource (GitHub URLs normalized to base repo).
 
 
-### 6.14 `DELETE /config/resources`
+### 6.10 `DELETE /config/resources`
 Remove resource by name.
 
 Request:
@@ -583,7 +529,7 @@ Response:
 ```
 
 
-### 6.15 `POST /clear`
+### 6.11 `POST /clear`
 Clears all cached resource clones.
 
 Response:
@@ -748,8 +694,6 @@ Response shape:
 ---
 
 ## 10. Known Gaps / Audit Notes
-
-- `btca config` subcommands exist in code but are **not wired** into the CLI entrypoint.
 - `--global` flags exist on several commands, but the effective target is determined by whether a project config exists; there is no strict global override path.
 - `btca remote add` defaults differ between paths:
   - Interactive path uses model `claude-haiku`.

@@ -40,6 +40,6 @@ Then use `@mentions` to reference resources (e.g., "@svelte How do I create a st
 This project's btca resources are configured in `btca.config.jsonc` at the project root. To modify:
 
 - Edit the config file directly, or
-- Use `btca config resources add/remove` commands
+- Use `btca add` / `btca remove` commands
 
 Resources will be cloned to `~/.local/share/btca/resources/` on first use.
