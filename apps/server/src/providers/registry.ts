@@ -5,6 +5,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
+import { createCopilotProvider } from './copilot.ts';
 import { createOpenCodeZen } from './opencode.ts';
 import { createOpenAICodex } from './openai.ts';
 import { createOpenRouter } from './openrouter.ts';
@@ -36,6 +37,8 @@ export const PROVIDER_REGISTRY: Record<string, ProviderFactory> = {
 
 	// OpenAI
 	openai: createOpenAICodex as ProviderFactory,
+	// GitHub Copilot
+	'github-copilot': createCopilotProvider as ProviderFactory,
 	// Google
 	google: createGoogleGenerativeAI as ProviderFactory,
 

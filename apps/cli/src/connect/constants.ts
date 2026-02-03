@@ -1,5 +1,11 @@
 export const CURATED_MODELS: Record<string, { id: string; label: string }[]> = {
 	openai: [{ id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' }],
+	'github-copilot': [
+		{ id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
+		{ id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+		{ id: 'grok-code-fast-1', label: 'Grok Code Fast 1' },
+		{ id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' }
+	],
 	opencode: [
 		{ id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
 		{ id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
@@ -23,6 +29,7 @@ export const CURATED_MODELS: Record<string, { id: string; label: string }[]> = {
 
 export const PROVIDER_INFO: Record<string, { label: string; requiresAuth: boolean }> = {
 	opencode: { label: 'OpenCode Zen', requiresAuth: true },
+	'github-copilot': { label: 'GitHub Copilot', requiresAuth: true },
 	anthropic: { label: 'Anthropic (Claude)', requiresAuth: true },
 	openai: { label: 'OpenAI (GPT)', requiresAuth: true },
 	google: { label: 'Google (Gemini)', requiresAuth: true },
@@ -30,6 +37,7 @@ export const PROVIDER_INFO: Record<string, { label: string; requiresAuth: boolea
 };
 
 export const PROVIDER_AUTH_GUIDANCE: Record<string, string> = {
+	'github-copilot': 'GitHub Copilot uses device flow OAuth: follow the browser prompt.',
 	openai: 'OpenAI requires OAuth: btca will open a browser to sign in.',
 	anthropic: 'Anthropic uses API keys: paste your API key to continue.',
 	google: 'Google uses API keys: paste your API key to continue.',

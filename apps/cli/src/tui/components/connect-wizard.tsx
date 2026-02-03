@@ -17,6 +17,7 @@ import { useMessagesContext } from '../context/messages-context.tsx';
 import { useConfigContext } from '../context/config-context.tsx';
 import { services } from '../services.ts';
 import { formatError } from '../lib/format-error.ts';
+import { loginCopilotOAuth } from '../../lib/copilot-oauth.ts';
 import { loginOpenAIOAuth, saveProviderApiKey } from '../../lib/opencode-oauth.ts';
 import {
 	CURATED_MODELS,
@@ -197,7 +198,29 @@ export const ConnectWizard: Component<ConnectWizardProps> = (props) => {
 		return true;
 	};
 
+	const runCopilotOAuth = async () => {
+		setStepSafe('auth');
+		setBusy(true);
+		setStatusMessage('Starting GitHub Copilot device flow...');
+		const result = await loginCopilotOAuth();
+		setBusy(false);
+
+		if (!result.ok) {
+			setError(result.error);
+			messages.addSystemMessage(`Error: ${result.error}`);
+			setStepSafe('provider');
+			return false;
+		}
+
+		messages.addSystemMessage('GitHub Copilot authentication complete.');
+		return true;
+	};
+
 	const requireAuth = async (providerId: string) => {
+		if (providerId === 'github-copilot') {
+			return runCopilotOAuth();
+		}
+
 		if (providerId === 'openai') {
 			return runOpenAIOAuth();
 		}

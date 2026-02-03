@@ -6,6 +6,7 @@ import { spawn } from 'bun';
 import { ensureServer } from '../server/manager.ts';
 import { createClient, getProviders, updateModel, BtcaError } from '../client/index.ts';
 import { dim, green } from '../lib/utils/colors.ts';
+import { loginCopilotOAuth } from '../lib/copilot-oauth.ts';
 import { loginOpenAIOAuth, saveProviderApiKey } from '../lib/opencode-oauth.ts';
 import {
 	CURATED_MODELS,
@@ -153,6 +154,17 @@ async function runBtcaAuth(providerId: string): Promise<boolean> {
 		return true;
 	}
 
+	if (providerId === 'github-copilot') {
+		console.log('\nStarting GitHub Copilot device flow...');
+		const result = await loginCopilotOAuth();
+		if (!result.ok) {
+			console.error(`Failed to authenticate with GitHub Copilot: ${result.error}`);
+			return false;
+		}
+		console.log('GitHub Copilot authentication complete.');
+		return true;
+	}
+
 	if (
 		providerId === 'opencode' ||
 		providerId === 'openrouter' ||
@@ -181,7 +193,10 @@ async function runBtcaAuth(providerId: string): Promise<boolean> {
 export const connectCommand = new Command('connect')
 	.description('Configure the AI provider and model')
 	.option('-g, --global', 'Save to global config instead of project config')
-	.option('-p, --provider <id>', 'Provider ID (opencode, openrouter, openai, google, anthropic)')
+	.option(
+		'-p, --provider <id>',
+		'Provider ID (opencode, openrouter, openai, google, anthropic, github-copilot)'
+	)
 	.option('-m, --model <id>', 'Model ID (e.g., "claude-haiku-4-5")')
 	.action(async (options: { global?: boolean; provider?: string; model?: string }, command) => {
 		const globalOpts = command.parent?.opts() as { server?: string; port?: number } | undefined;

@@ -22,6 +22,7 @@ export namespace Auth {
 
 	const PROVIDER_AUTH_TYPES: Record<string, readonly AuthType[]> = {
 		opencode: ['api'],
+		'github-copilot': ['oauth'],
 		openrouter: ['api'],
 		openai: ['oauth'],
 		anthropic: ['api'],
@@ -146,13 +147,21 @@ export namespace Auth {
 			return { status: 'invalid', authType: auth.type };
 		}
 
-		const apiKey = auth.type === 'api' ? auth.key : auth.type === 'oauth' ? auth.access : undefined;
+		const oauthKey =
+			auth.type === 'oauth'
+				? providerId === 'github-copilot'
+					? auth.refresh
+					: auth.access
+				: undefined;
+		const apiKey = auth.type === 'api' ? auth.key : auth.type === 'oauth' ? oauthKey : undefined;
 		const accountId = auth.type === 'oauth' ? auth.accountId : undefined;
 		return { status: 'ok', authType: auth.type, apiKey, accountId };
 	}
 
 	export const getProviderAuthHint = (providerId: string) => {
 		switch (providerId) {
+			case 'github-copilot':
+				return 'Run "btca connect -p github-copilot" and complete device flow OAuth.';
 			case 'openai':
 				return 'Run "opencode auth --provider openai" and complete OAuth.';
 			case 'anthropic':
