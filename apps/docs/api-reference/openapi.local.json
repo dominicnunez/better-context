@@ -396,21 +396,37 @@
           }
         }
       },
-      "ModelInfo": {
-        "type": "object",
-        "required": [
-          "provider",
-          "model"
-        ],
-        "properties": {
-          "provider": {
-            "type": "string"
-          },
-          "model": {
-            "type": "string"
+    "ModelInfo": {
+      "type": "object",
+      "required": [
+        "provider",
+        "model"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "providerOptions": {
+          "type": "object",
+          "description": "Per-provider options (e.g., baseURL and name for openai-compat)",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "baseURL": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
           }
         }
-      },
+      }
+    },
       "Resource": {
         "oneOf": [
           {

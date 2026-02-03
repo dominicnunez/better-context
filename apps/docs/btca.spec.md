@@ -47,6 +47,7 @@ Supported providers:
 - `opencode` — API key
 - `openrouter` — API key
 - `openai` — OAuth (no API keys)
+- `openai-compat` — optional API key (requires baseURL + name in config)
 - `anthropic` — API key
 - `google` — API key or OAuth
 
@@ -60,8 +61,16 @@ Environment variable overrides:
 **`btca connect`**:
 
 - If provider is `openai`, runs local OAuth flow (PKCE) and writes tokens into OpenCode auth.
+- If provider is `openai-compat`, prompts for base URL, provider name, model ID, and optional API key.
 - If provider is `opencode`, `openrouter`, `anthropic`, or `google`, prompts for API key and writes into OpenCode auth.
 - If provider is not handled directly, falls back to `opencode auth --provider <provider>`.
+
+**OpenAI-compatible provider inputs (and why):**
+
+- `baseURL` (required): the root URL for your OpenAI-compatible server (e.g., LM Studio, Ollama, local gateway). The AI SDK appends its own endpoint paths to this base URL.
+- `name` (required): provider identifier used by the AI SDK to namespace requests and model bindings.
+- `model id` (required): stored in `btca.config.jsonc` as the `model` field and used for all requests to select the model on your server.
+- `api key` (optional): only needed if your server requires auth; stored in OpenCode auth and sent as a bearer token.
 
 **`btca disconnect`**:
 
@@ -110,6 +119,12 @@ Example:
   "provider": "opencode",
   "model": "claude-haiku-4-5",
   "dataDirectory": ".btca",
+  "providerOptions": {
+    "openai-compat": {
+      "baseURL": "http://localhost:1234/v1",
+      "name": "lmstudio"
+    }
+  },
   "resources": [
     {
       "type": "git",

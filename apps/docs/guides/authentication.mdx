@@ -15,6 +15,7 @@ Supported providers:
 - `opencode` (API key)
 - `openrouter` (API key)
 - `openai` (OAuth, no API keys)
+- `openai-compat` (optional API key)
 - `anthropic` (API key)
 - `google` (API key or OAuth)
 
@@ -32,6 +33,15 @@ btca disconnect
 
 `btca connect` performs OAuth for `openai`, prompts for API keys when required, and
 falls back to `opencode auth --provider <provider>` for other providers.
+
+For `openai-compat`, `btca connect` also collects the required provider details:
+
+- **Base URL** (required): the root URL of your OpenAI-compatible server. The AI SDK appends its own
+  endpoint paths, so btca must know the base URL to send requests to the correct host.
+- **Provider name** (required): the identifier the AI SDK uses to namespace requests for this
+  OpenAI-compatible provider.
+- **Model ID** (required): the model to use for requests; stored in `btca.config.jsonc` as `model`.
+- **API key** (optional): only if your server requires authentication; stored in OpenCode auth.
 
 ## Cloud auth (btca remote)
 

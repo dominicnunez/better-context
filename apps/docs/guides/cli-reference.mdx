@@ -80,6 +80,13 @@ Options:
 
 Behavior: When provider and model are provided, it updates the config directly. Otherwise, it walks an interactive provider selection (connected providers first), then model selection. If auth is required, it prompts for credentials.
 
+For `openai-compat`, the interactive flow additionally prompts for:
+
+- Base URL (required): root URL of your OpenAI-compatible server.
+- Provider name (required): AI SDK provider identifier.
+- Model ID (required): saved as `model` in `btca.config.jsonc`.
+- API key (optional): only if your server requires auth, stored in OpenCode auth.
+
 ## `btca disconnect`
 
 Disconnects provider credentials.

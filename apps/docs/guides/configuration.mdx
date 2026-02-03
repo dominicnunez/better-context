@@ -25,6 +25,15 @@ Example:
   "provider": "opencode",
   "model": "claude-haiku-4-5",
   "dataDirectory": ".btca",
+  "providerOptions": {
+    // OpenAI-compatible providers (e.g., LM Studio)
+    "openai-compat": {
+      // Base URL of your OpenAI-compatible server
+      "baseURL": "http://localhost:1234/v1",
+      // Provider name used by the AI SDK
+      "name": "lmstudio"
+    }
+  },
   "resources": [
     {
       "type": "git",
@@ -37,6 +46,13 @@ Example:
   ]
 }
 ```
+
+OpenAI-compatible config requirements:
+
+- `providerOptions.openai-compat.baseURL` (required) tells btca where to send requests.
+- `providerOptions.openai-compat.name` (required) is the provider identifier used by the AI SDK.
+- `model` (required) must match a model ID your server exposes.
+- The API key (if required) is stored in OpenCode auth, not in this config.
 
 Defaults if the global config is missing:
 
