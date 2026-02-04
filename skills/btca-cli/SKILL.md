@@ -37,7 +37,7 @@ Follow the prompts.
 btca add -n svelte-dev https://github.com/sveltejs/svelte.dev
 
 # Local directory
-btca add -n my-docs -t local --path /absolute/path/to/docs
+btca add -n my-docs -t local /absolute/path/to/docs
 ```
 
 6. Verify resources:

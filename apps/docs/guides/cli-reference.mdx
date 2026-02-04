@@ -44,6 +44,12 @@ Options:
 
 Behavior: If no argument is provided, the CLI starts an interactive wizard. When `--type` is omitted, it auto-detects URL vs path. GitHub URLs are normalized to the base repo. Local paths are resolved to absolute paths.
 
+Example (local path):
+
+```bash
+btca add -n my-docs -t local /absolute/path/to/docs
+```
+
 ## `btca remove [name]`
 
 Removes a resource by name. If omitted, it opens an interactive picker.
