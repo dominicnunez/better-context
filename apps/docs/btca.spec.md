@@ -294,7 +294,7 @@ Behavior:
 
 ### 4.9 `btca skill`
 
-Print the skills.sh install command for the btca CLI skill.
+Run the skills.sh installer for the btca CLI skill (interactive).
 
 ### 4.10 `btca init`
 

@@ -1,11 +1,23 @@
 import { Command } from 'commander';
 
-const INSTALL_COMMAND =
-	'npx skills add https://github.com/bmdavis419/better-context --skill btca-cli';
+const INSTALL_COMMAND = [
+	'bunx',
+	'skills',
+	'add',
+	'davis7dotsh/better-context',
+	'--skill',
+	'btca-cli'
+];
 
 export const skillCommand = new Command('skill')
-	.description('Print the skills.sh install command for the btca CLI skill')
-	.action(() => {
-		console.log('Run this command to install the btca CLI skill:');
-		console.log(INSTALL_COMMAND);
+	.description('Install the btca CLI skill via skills.sh')
+	.action(async () => {
+		const subprocess = Bun.spawn(INSTALL_COMMAND, {
+			stdio: ['inherit', 'inherit', 'inherit']
+		});
+
+		const exitCode = await subprocess.exited;
+		if (exitCode !== 0) {
+			process.exit(exitCode);
+		}
 	});

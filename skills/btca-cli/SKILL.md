@@ -68,6 +68,11 @@ btca ask -r react -r typescript -q "How do I type useState?"
 
 - You can see which resources are configured with `btca resources`.
 
+## Config Overview
+
+- Config lives in `btca.config.jsonc` (project) and `~/.config/btca/btca.config.jsonc` (global).
+- Project config overrides global and controls provider/model and resources.
+
 ## Troubleshooting
 
 - "No resources configured": add resources with `btca add ...` and re-run `btca resources`.
