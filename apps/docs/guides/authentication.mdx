@@ -15,6 +15,7 @@ Supported providers:
 - `opencode` (API key)
 - `openrouter` (API key)
 - `openai` (OAuth, no API keys)
+- `github-copilot` (OAuth device flow)
 - `openai-compat` (optional API key)
 - `anthropic` (API key)
 - `google` (API key or OAuth)
@@ -31,8 +32,11 @@ btca connect
 btca disconnect
 ```
 
-`btca connect` performs OAuth for `openai`, prompts for API keys when required, and
-falls back to `opencode auth --provider <provider>` for other providers.
+`btca connect` performs OAuth for `openai` and `github-copilot`, prompts for API keys when
+required, and falls back to `opencode auth --provider <provider>` for other providers.
+
+For `github-copilot`, btca uses device flow OAuth and opens a browser prompt to complete
+the sign-in.
 
 For `openai-compat`, `btca connect` also collects the required provider details:
 

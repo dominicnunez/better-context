@@ -54,8 +54,8 @@
 		"isomorphic-dompurify": "^2.35.0",
 		"marked": "^17.0.1",
 		"nanoid": "^5.1.6",
-		"posthog-js": "^1.328.0",
-		"posthog-node": "^5.21.1",
+		"posthog-js": "^1.339.1",
+		"posthog-node": "^5.24.9",
 		"shiki": "^3.21.0",
 		"tmcp": "^1.19.0",
 		"zod": "^4.3.5"
