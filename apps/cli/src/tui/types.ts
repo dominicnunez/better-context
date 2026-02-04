@@ -47,9 +47,9 @@ export type Message =
 			content: string;
 	  };
 
-export type CommandMode = 'add-repo' | 'select-blessed-model' | 'clear';
+export type CommandMode = 'add-repo' | 'connect' | 'clear' | 'resume';
 
-export type ActiveWizard = 'none' | 'add-repo' | 'blessed-model';
+export type ActiveWizard = 'none' | 'add-repo' | 'connect' | 'resume';
 
 export type WizardStep =
 	| 'type'
@@ -60,6 +60,15 @@ export type WizardStep =
 	| 'path'
 	| 'notes'
 	| 'confirm'
+	| 'provider'
+	| 'auth'
+	| 'api-key'
+	| 'model'
+	| 'model-input'
+	| 'compat-base-url'
+	| 'compat-name'
+	| 'compat-model'
+	| 'compat-api-key'
 	| null;
 
 export interface Command {

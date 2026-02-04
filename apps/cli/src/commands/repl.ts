@@ -1,13 +1,24 @@
-import { ensureServer, type ServerManager } from '../server/manager.ts';
-import { createClient, getResources, askQuestionStream, BtcaError } from '../client/index.ts';
-import { parseSSEStream } from '../client/stream.ts';
+import { Result } from 'better-result';
 import type { BtcaStreamEvent } from 'btca-server/stream/types';
+import { ensureServer, type ServerManager } from '../server/manager.ts';
+import {
+	createClient,
+	getConfig,
+	getResources,
+	askQuestionStream,
+	BtcaError
+} from '../client/index.ts';
+import { parseSSEStream } from '../client/stream.ts';
+import { setTelemetryContext, trackTelemetryEvent } from '../lib/telemetry.ts';
 
 type ResourceInfo = { name: string; type: string; url?: string };
 
 export interface ReplOptions {
 	server?: string;
 	port?: number;
+	thinking?: boolean;
+	tools?: boolean;
+	subAgent?: boolean;
 }
 
 /**
@@ -28,11 +39,11 @@ function formatError(error: unknown): string {
  * Extract @mentions from input
  */
 function extractMentions(input: string): string[] {
-	const mentionRegex = /@([A-Za-z0-9@._/-]+)/g;
+	const mentionRegex = /(^|[^\w@])@([A-Za-z0-9._/-]+)/g;
 	const mentions: string[] = [];
 	let match;
 	while ((match = mentionRegex.exec(input)) !== null) {
-		if (match[1]) mentions.push(match[1]);
+		if (match[2]) mentions.push(match[2]);
 	}
 	return mentions;
 }
@@ -43,8 +54,8 @@ function extractMentions(input: string): string[] {
 function cleanInput(input: string, validResources: string[]): string {
 	const validSet = new Set(validResources.map((r) => r.toLowerCase()));
 	return input
-		.replace(/@([A-Za-z0-9@._/-]+)/g, (match, mention) => {
-			return validSet.has(mention.toLowerCase()) ? '' : match;
+		.replace(/(^|[^\w@])@([A-Za-z0-9._/-]+)/g, (match, prefix, mention) => {
+			return validSet.has(mention.toLowerCase()) ? prefix : match;
 		})
 		.replace(/\s+/g, ' ')
 		.trim();
@@ -102,19 +113,22 @@ async function prompt(message: string): Promise<string | null> {
 	const decoder = new TextDecoder();
 	let input = '';
 
-	try {
+	const result = await Result.tryPromise(async () => {
 		while (true) {
 			const { value, done } = await reader.read();
 			if (done) return null;
-			input += decoder.decode(value, { stream: true });
+			input += decoder.decode(value ?? new Uint8Array(), { stream: true });
 			const newlineIndex = input.indexOf('\n');
 			if (newlineIndex !== -1) {
 				return input.slice(0, newlineIndex).trim();
 			}
 		}
-	} finally {
-		reader.releaseLock();
+	});
+	reader.releaseLock();
+	if (result.isErr()) {
+		throw result.error;
 	}
+	return result.value;
 }
 
 /**
@@ -122,19 +136,35 @@ async function prompt(message: string): Promise<string | null> {
  */
 export async function launchRepl(options: ReplOptions): Promise<void> {
 	let server: ServerManager | null = null;
+	const showThinking = options.subAgent ? false : (options.thinking ?? true);
+	const showTools = options.subAgent ? false : (options.tools ?? true);
 
-	try {
+	const result = await Result.tryPromise(async () => {
 		server = await ensureServer({
 			serverUrl: options.server,
 			port: options.port
 		});
+		if (!server) {
+			throw new Error('Server not initialized');
+		}
+		const activeServer = server;
 
 		const client = createClient(server.url);
-		const { resources } = await getResources(client);
+		const [config, resourcesResult] = await Promise.all([getConfig(client), getResources(client)]);
+		setTelemetryContext({ provider: config.provider, model: config.model });
+		await trackTelemetryEvent({
+			event: 'cli_started',
+			properties: { command: 'btca', mode: 'repl' }
+		});
+		await trackTelemetryEvent({
+			event: 'cli_repl_started',
+			properties: { command: 'btca', mode: 'repl' }
+		});
+		const { resources } = resourcesResult;
 
 		if (resources.length === 0) {
 			console.error('Error: No resources configured.');
-			console.error('Add resources to your btca config file.');
+			console.error('Add resources with "btca add" or check "btca resources".');
 			process.exit(1);
 		}
 
@@ -200,18 +230,10 @@ Examples:
 			// Extract @mentions from input
 			const mentions = extractMentions(input);
 			const validNewResources: string[] = [];
-			const invalidResources: string[] = [];
 
 			for (const mention of mentions) {
 				const resolved = resolveResourceName(mention, resources);
 				if (resolved) validNewResources.push(resolved);
-				else invalidResources.push(mention);
-			}
-
-			if (invalidResources.length > 0) {
-				console.log(`Unknown resource(s): ${invalidResources.join(', ')}`);
-				console.log(`Available: ${resources.map((r) => r.name).join(', ')}`);
-				continue;
 			}
 
 			// Accumulate resources
@@ -233,10 +255,10 @@ Examples:
 			}
 
 			// Stream the response
-			try {
+			const streamResult = await Result.tryPromise(async () => {
 				console.log(`[Searching: ${sessionResources.join(', ')}]\n`);
 
-				const response = await askQuestionStream(server.url, {
+				const response = await askQuestionStream(activeServer.url, {
 					question,
 					resources: sessionResources,
 					quiet: true
@@ -248,6 +270,7 @@ Examples:
 				for await (const event of parseSSEStream(response)) {
 					handleStreamEvent(event, {
 						onReasoningDelta: (delta) => {
+							if (!showThinking) return;
 							if (!inReasoning) {
 								process.stdout.write('<thinking>\n');
 								inReasoning = true;
@@ -267,6 +290,7 @@ Examples:
 								process.stdout.write('\n</thinking>\n\n');
 								inReasoning = false;
 							}
+							if (!showTools) return;
 							if (hasText) process.stdout.write('\n');
 							console.log(`[${tool}]`);
 						},
@@ -281,16 +305,19 @@ Examples:
 				}
 
 				console.log('\n');
-			} catch (error) {
-				console.error(formatError(error));
+			});
+
+			if (Result.isError(streamResult)) {
+				console.error(formatError(streamResult.error));
 			}
 		}
 
-		server.stop();
+		activeServer.stop();
 		process.exit(0);
-	} catch (error) {
-		console.error(formatError(error));
-		server?.stop();
+	});
+
+	if (Result.isError(result)) {
+		console.error(formatError(result.error));
 		process.exit(1);
 	}
 }

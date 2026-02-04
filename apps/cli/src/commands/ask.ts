@@ -1,8 +1,16 @@
+import { Result } from 'better-result';
+import type { BtcaStreamEvent } from 'btca-server/stream/types';
 import { Command } from 'commander';
 import { ensureServer } from '../server/manager.ts';
-import { createClient, getResources, askQuestionStream, BtcaError } from '../client/index.ts';
+import {
+	createClient,
+	getConfig,
+	getResources,
+	askQuestionStream,
+	BtcaError
+} from '../client/index.ts';
 import { parseSSEStream } from '../client/stream.ts';
-import type { BtcaStreamEvent } from 'btca-server/stream/types';
+import { setTelemetryContext, trackTelemetryEvent } from '../lib/telemetry.ts';
 
 /**
  * Format an error for display, including hint if available.
@@ -22,13 +30,13 @@ function formatError(error: unknown): string {
  * Extract potential @mentions from query string (without modifying the query yet)
  */
 function extractMentions(query: string): string[] {
-	const mentionRegex = /@([A-Za-z0-9@._/-]+)/g;
+	const mentionRegex = /(^|[^\w@])@([A-Za-z0-9._/-]+)/g;
 	const mentions: string[] = [];
 	let match;
 
 	while ((match = mentionRegex.exec(query)) !== null) {
-		if (match[1]) {
-			mentions.push(match[1]);
+		if (match[2]) {
+			mentions.push(match[2]);
 		}
 	}
 
@@ -41,8 +49,8 @@ function extractMentions(query: string): string[] {
 function cleanQueryOfValidResources(query: string, validResources: string[]): string {
 	const validSet = new Set(validResources.map((r) => r.toLowerCase()));
 	return query
-		.replace(/@([A-Za-z0-9@._/-]+)/g, (match, mention) => {
-			return validSet.has(mention.toLowerCase()) ? '' : match;
+		.replace(/(^|[^\w@])@([A-Za-z0-9._/-]+)/g, (match, prefix, mention) => {
+			return validSet.has(mention.toLowerCase()) ? prefix : match;
 		})
 		.replace(/\s+/g, ' ')
 		.trim();
@@ -94,8 +102,16 @@ export const askCommand = new Command('ask')
 	.description('Ask a question about configured resources')
 	.requiredOption('-q, --question <text>', 'Question to ask')
 	.option('-r, --resource <name...>', 'Resources to search (can specify multiple)')
+	.option('--no-thinking', 'Hide reasoning output')
+	.option('--no-tools', 'Hide tool-call traces')
+	.option('--sub-agent', 'Emit clean output (no reasoning or tool traces)')
 	.action(async (options, command) => {
+		const commandName = 'ask';
 		const globalOpts = command.parent?.opts() as { server?: string; port?: number } | undefined;
+		const showThinking = options.subAgent ? false : (options.thinking ?? true);
+		const showTools = options.subAgent ? false : (options.tools ?? true);
+		const startedAt = Date.now();
+		let outputChars = 0;
 
 		// Check for deprecated -t flag usage (not registered, but might be in user's muscle memory)
 		const rawArgs = process.argv;
@@ -106,98 +122,142 @@ export const askCommand = new Command('ask')
 			process.exit(1);
 		}
 
-		try {
+		const result = await Result.tryPromise(async () => {
 			const server = await ensureServer({
 				serverUrl: globalOpts?.server,
 				port: globalOpts?.port,
 				quiet: true
 			});
 
-			const client = createClient(server.url);
-
-			const { resources } = await getResources(client);
-			if (resources.length === 0) {
-				console.error('Error: No resources configured.');
-				console.error('Add resources to your btca config file.');
-				process.exit(1);
-			}
-
-			const questionText = options.question as string;
-			const cliResources = (options.resource as string[] | undefined) ?? [];
-			const mentionedResources = extractMentions(questionText);
-
-			const allRequestedResources = mergeResources(cliResources, mentionedResources);
-
-			const normalized = normalizeResourceNames(allRequestedResources, resources);
-
-			const resourceNames: string[] =
-				normalized.names.length > 0 ? normalized.names : resources.map((r) => r.name);
-
-			const cleanedQuery = cleanQueryOfValidResources(questionText, normalized.names);
-
-			console.log('loading resources...');
-
-			// Stream the response
-			const response = await askQuestionStream(server.url, {
-				question: cleanedQuery,
-				resources: resourceNames,
-				quiet: true
-			});
-
-			let receivedMeta = false;
-			let inReasoning = false;
-			let hasText = false;
-
-			for await (const event of parseSSEStream(response)) {
-				handleStreamEvent(event, {
-					onMeta: () => {
-						if (!receivedMeta) {
-							console.log('creating collection...\n');
-							receivedMeta = true;
-						}
-					},
-					onReasoningDelta: (delta) => {
-						if (!inReasoning) {
-							process.stdout.write('<thinking>\n');
-							inReasoning = true;
-						}
-						process.stdout.write(delta);
-					},
-					onTextDelta: (delta) => {
-						if (inReasoning) {
-							process.stdout.write('\n</thinking>\n\n');
-							inReasoning = false;
-						}
-						hasText = true;
-						process.stdout.write(delta);
-					},
-					onToolCall: (tool) => {
-						if (inReasoning) {
-							process.stdout.write('\n</thinking>\n\n');
-							inReasoning = false;
-						}
-						if (hasText) {
-							process.stdout.write('\n');
-						}
-						console.log(`[${tool}]`);
-					},
-					onError: (message) => {
-						console.error(`\nError: ${message}`);
-					}
+			try {
+				const client = createClient(server.url);
+				const [config, resourcesResult] = await Promise.all([
+					getConfig(client),
+					getResources(client)
+				]);
+				setTelemetryContext({ provider: config.provider, model: config.model });
+				await trackTelemetryEvent({
+					event: 'cli_started',
+					properties: { command: commandName, mode: 'ask' }
 				});
-			}
+				await trackTelemetryEvent({
+					event: 'cli_ask_started',
+					properties: { command: commandName, mode: 'ask' }
+				});
 
-			if (inReasoning) {
-				process.stdout.write('\n</thinking>\n');
-			}
+				const { resources } = resourcesResult;
+				if (resources.length === 0) {
+					console.error('Error: No resources configured.');
+					console.error('Add resources with "btca add" or check "btca resources".');
+					process.exit(1);
+				}
 
-			console.log('\n');
-			server.stop();
-			process.exit(0);
-		} catch (error) {
-			console.error(formatError(error));
+				const questionText = options.question as string;
+				const cliResources = (options.resource as string[] | undefined) ?? [];
+				const mentionedResources = extractMentions(questionText);
+
+				const allRequestedResources = mergeResources(cliResources, mentionedResources);
+
+				const normalized = normalizeResourceNames(allRequestedResources, resources);
+
+				const resourceNames: string[] =
+					normalized.names.length > 0 ? normalized.names : resources.map((r) => r.name);
+
+				const cleanedQuery = cleanQueryOfValidResources(questionText, normalized.names);
+
+				console.log('loading resources...');
+
+				// Stream the response
+				const response = await askQuestionStream(server.url, {
+					question: cleanedQuery,
+					resources: resourceNames,
+					quiet: true
+				});
+
+				let receivedMeta = false;
+				let inReasoning = false;
+				let hasText = false;
+
+				for await (const event of parseSSEStream(response)) {
+					handleStreamEvent(event, {
+						onMeta: () => {
+							if (!receivedMeta) {
+								console.log('creating collection...\n');
+								receivedMeta = true;
+							}
+						},
+						onReasoningDelta: (delta) => {
+							if (!showThinking) return;
+							if (!inReasoning) {
+								process.stdout.write('<thinking>\n');
+								inReasoning = true;
+							}
+							process.stdout.write(delta);
+						},
+						onTextDelta: (delta) => {
+							if (inReasoning) {
+								process.stdout.write('\n</thinking>\n\n');
+								inReasoning = false;
+							}
+							hasText = true;
+							outputChars += delta.length;
+							process.stdout.write(delta);
+						},
+						onToolCall: (tool) => {
+							if (inReasoning) {
+								process.stdout.write('\n</thinking>\n\n');
+								inReasoning = false;
+							}
+							if (!showTools) return;
+							if (hasText) {
+								process.stdout.write('\n');
+							}
+							console.log(`[${tool}]`);
+						},
+						onError: (message) => {
+							console.error(`\nError: ${message}`);
+						}
+					});
+				}
+
+				if (inReasoning) {
+					process.stdout.write('\n</thinking>\n');
+				}
+
+				console.log('\n');
+			} finally {
+				server.stop();
+			}
+		});
+
+		const durationMs = Date.now() - startedAt;
+		if (Result.isError(result)) {
+			const error = result.error;
+			const errorName = error instanceof Error ? error.name : 'UnknownError';
+			await trackTelemetryEvent({
+				event: 'cli_ask_failed',
+				properties: {
+					command: commandName,
+					mode: 'ask',
+					durationMs,
+					errorName,
+					exitCode: 1
+				}
+			});
+			console.error(formatError(result.error));
 			process.exit(1);
 		}
+		await trackTelemetryEvent({
+			event: 'cli_ask_completed',
+			properties: {
+				command: commandName,
+				mode: 'ask',
+				durationMs,
+				outputChars,
+				exitCode: 0
+			}
+		});
+		process.exit(0);
 	});
 
 interface StreamHandlers {

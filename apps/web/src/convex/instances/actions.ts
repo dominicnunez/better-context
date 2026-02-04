@@ -17,8 +17,8 @@ const SANDBOX_IDLE_MINUTES = 2;
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const DEFAULT_PROVIDER = 'opencode';
 const BTCA_SERVER_SESSION = 'btca-server-session';
+const BTCA_SERVER_LOG_PATH = '/tmp/btca-server.log';
 const BTCA_PACKAGE_NAME = 'btca@latest';
-const OPENCODE_PACKAGE_NAME = 'opencode-ai@latest';
 
 const instanceArgs = { instanceId: v.id('instances') };
 
@@ -33,7 +33,6 @@ type ResourceConfig = {
 
 type InstalledVersions = {
 	btcaVersion?: string;
-	opencodeVersion?: string;
 };
 
 let daytonaInstance: Daytona | null = null;
@@ -77,26 +76,6 @@ function generateBtcaConfig(resources: ResourceConfig[]): string {
 	);
 }
 
-async function waitForBtcaServer(sandbox: Sandbox, maxRetries = 15): Promise<boolean> {
-	for (let i = 0; i < maxRetries; i++) {
-		await new Promise((resolve) => setTimeout(resolve, 2000));
-
-		try {
-			const healthCheck = await sandbox.process.executeCommand(
-				`curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:${BTCA_SERVER_PORT}/`
-			);
-
-			const statusCode = healthCheck.result.trim();
-			if (statusCode === '200') {
-				return true;
-			}
-		} catch {
-			// Continue retrying
-		}
-	}
-	return false;
-}
-
 function getErrorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : 'Unknown error';
 }
@@ -107,6 +86,88 @@ function parseVersion(output: string): string | undefined {
 	const match = trimmed.match(/\d+\.\d+\.\d+(?:[-+][\w.-]+)?/);
 	return match?.[0] ?? trimmed;
 }
+
+const truncate = (value?: string, maxLength = 2000) => {
+	if (!value) return undefined;
+	return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+};
+
+const getErrorDetails = (error: unknown) => {
+	if (error instanceof Error) {
+		const withMeta = error as Error & { code?: string; cause?: unknown };
+		return {
+			message: error.message,
+			name: error.name,
+			stack: truncate(error.stack, 4000),
+			code: typeof withMeta.code === 'string' ? withMeta.code : undefined,
+			cause:
+				withMeta.cause instanceof Error
+					? withMeta.cause.message
+					: typeof withMeta.cause === 'string'
+						? withMeta.cause
+						: undefined
+		};
+	}
+
+	if (typeof error === 'string') {
+		return { message: error };
+	}
+
+	return { message: 'Unknown error' };
+};
+
+const getErrorContext = (error: unknown) => {
+	if (!error || typeof error !== 'object') return undefined;
+	return 'context' in error ? (error as { context?: Record<string, unknown> }).context : undefined;
+};
+
+const attachErrorContext = (error: unknown, context: Record<string, unknown>) => {
+	if (!error || typeof error !== 'object') return error;
+	const target = error as { context?: Record<string, unknown> };
+	const existing = target.context ?? {};
+	const next = { ...context, ...existing };
+	if (existing.step) {
+		next.step = existing.step;
+	}
+	target.context = next;
+	return error;
+};
+
+const withStep = async <T>(step: string, task: () => Promise<T>) => {
+	try {
+		return await task();
+	} catch (error) {
+		throw attachErrorContext(error, { step });
+	}
+};
+
+const formatUserMessage = (operation: string, step: string | undefined, detail?: string) => {
+	const actionLabel =
+		operation === 'provision'
+			? 'Provisioning'
+			: operation === 'wake'
+				? 'Starting'
+				: operation === 'update'
+					? 'Updating'
+					: 'Instance';
+	const stepLabel = step
+		? {
+				load_resources: 'loading resources',
+				create_sandbox: 'creating the sandbox',
+				get_sandbox: 'locating the sandbox',
+				start_sandbox: 'starting the sandbox',
+				upload_config: 'syncing configuration',
+				start_btca: 'starting the btca server',
+				health_check: 'waiting for btca to respond',
+				get_versions: 'checking package versions',
+				update_packages: 'updating packages',
+				stop_sandbox: 'stopping the sandbox'
+			}[step]
+		: undefined;
+	const base = `${actionLabel} failed${stepLabel ? ` while ${stepLabel}` : ''}.`;
+	const trimmed = truncate(detail, 160);
+	return `${base}${trimmed ? ` ${trimmed}` : ''} Please retry.`;
+};
 
 async function getResourceConfigs(
 	ctx: ActionCtx,
@@ -149,6 +210,41 @@ async function uploadBtcaConfig(sandbox: Sandbox, resources: ResourceConfig[]): 
 	await sandbox.fs.uploadFile(Buffer.from(config), '/root/btca.config.jsonc');
 }
 
+async function getBtcaLogTail(sandbox: Sandbox, lines = 80) {
+	try {
+		const result = await sandbox.process.executeCommand(
+			`tail -n ${lines} ${BTCA_SERVER_LOG_PATH} 2>/dev/null || true`
+		);
+		return result.result.trim();
+	} catch {
+		return '';
+	}
+}
+
+async function waitForBtcaServer(sandbox: Sandbox, maxRetries = 15) {
+	let lastStatus: string | undefined;
+	let lastError: string | undefined;
+
+	for (let i = 0; i < maxRetries; i++) {
+		await new Promise((resolve) => setTimeout(resolve, 2000));
+
+		try {
+			const healthCheck = await sandbox.process.executeCommand(
+				`curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:${BTCA_SERVER_PORT}/`
+			);
+
+			lastStatus = healthCheck.result.trim();
+			if (lastStatus === '200') {
+				return { ok: true, attempts: i + 1, lastStatus };
+			}
+		} catch (error) {
+			lastError = getErrorDetails(error).message;
+		}
+	}
+
+	return { ok: false, attempts: maxRetries, lastStatus, lastError };
+}
+
 async function startBtcaServer(sandbox: Sandbox): Promise<string> {
 	try {
 		await sandbox.process.createSession(BTCA_SERVER_SESSION);
@@ -156,18 +252,32 @@ async function startBtcaServer(sandbox: Sandbox): Promise<string> {
 		// Session may already exist
 	}
 
-	await sandbox.process.executeSessionCommand(BTCA_SERVER_SESSION, {
-		command: `cd /root && btca serve --port ${BTCA_SERVER_PORT}`,
-		runAsync: true
-	});
-
-	const serverReady = await waitForBtcaServer(sandbox);
-	if (!serverReady) {
-		throw new Error('btca server failed to start');
+	try {
+		await sandbox.process.executeSessionCommand(BTCA_SERVER_SESSION, {
+			command: `cd /root && btca serve --port ${BTCA_SERVER_PORT} > ${BTCA_SERVER_LOG_PATH} 2>&1`,
+			runAsync: true
+		});
+	} catch (error) {
+		throw attachErrorContext(error, { step: 'start_btca' });
 	}
 
-	const previewInfo = await sandbox.getPreviewLink(BTCA_SERVER_PORT);
-	return previewInfo.url;
+	const healthCheck = await waitForBtcaServer(sandbox);
+	if (!healthCheck.ok) {
+		const logTail = truncate(await getBtcaLogTail(sandbox), 2000);
+		const error = new Error('btca server failed to start');
+		throw attachErrorContext(error, {
+			step: 'health_check',
+			healthCheck,
+			btcaLogTail: logTail
+		});
+	}
+
+	try {
+		const previewInfo = await sandbox.getPreviewLink(BTCA_SERVER_PORT);
+		return previewInfo.url;
+	} catch (error) {
+		throw attachErrorContext(error, { step: 'start_btca' });
+	}
 }
 
 async function stopSandboxIfRunning(sandbox: Sandbox): Promise<void> {
@@ -178,24 +288,24 @@ async function stopSandboxIfRunning(sandbox: Sandbox): Promise<void> {
 
 async function ensureSandboxStarted(sandbox: Sandbox): Promise<boolean> {
 	if (sandbox.state === 'started') return true;
-	await sandbox.start(60);
+	try {
+		await sandbox.start(60);
+	} catch (error) {
+		throw attachErrorContext(error, { step: 'start_sandbox', sandboxState: sandbox.state });
+	}
 	return false;
 }
 
 async function getInstalledVersions(sandbox: Sandbox): Promise<InstalledVersions> {
-	const [btcaResult, opencodeResult] = await Promise.all([
-		sandbox.process.executeCommand('btca --version'),
-		sandbox.process.executeCommand('opencode --version')
-	]);
+	const btcaResult = await sandbox.process.executeCommand('btca --version');
 
 	return {
-		btcaVersion: parseVersion(btcaResult.result),
-		opencodeVersion: parseVersion(opencodeResult.result)
+		btcaVersion: parseVersion(btcaResult.result)
 	};
 }
 
 async function updatePackages(sandbox: Sandbox): Promise<void> {
-	await sandbox.process.executeCommand(`bun add -g ${BTCA_PACKAGE_NAME} ${OPENCODE_PACKAGE_NAME}`);
+	await sandbox.process.executeCommand(`bun add -g ${BTCA_PACKAGE_NAME}`);
 }
 
 async function fetchLatestVersion(packageName: string): Promise<string | undefined> {
@@ -230,30 +340,39 @@ export const provision = action({
 		});
 
 		let sandbox: Sandbox | null = null;
+		let step = 'load_resources';
 		try {
-			const resources = await getResourceConfigs(ctx, args.instanceId);
+			const resources = await withStep(step, () => getResourceConfigs(ctx, args.instanceId));
 			const daytona = getDaytona();
-			sandbox = await daytona.create({
-				snapshot: BTCA_SNAPSHOT_NAME,
-				autoStopInterval: SANDBOX_IDLE_MINUTES,
-				envVars: {
-					NODE_ENV: 'production',
-					OPENCODE_API_KEY: requireEnv('OPENCODE_API_KEY')
-				},
-				public: true
-			});
+			step = 'create_sandbox';
+			const createdSandbox = await withStep(step, () =>
+				daytona.create({
+					snapshot: BTCA_SNAPSHOT_NAME,
+					autoStopInterval: SANDBOX_IDLE_MINUTES,
+					envVars: {
+						NODE_ENV: 'production',
+						OPENCODE_API_KEY: requireEnv('OPENCODE_API_KEY')
+					},
+					public: true
+				})
+			);
+			sandbox = createdSandbox;
 
-			await uploadBtcaConfig(sandbox, resources);
-			await startBtcaServer(sandbox);
+			step = 'upload_config';
+			await withStep(step, () => uploadBtcaConfig(createdSandbox, resources));
 
-			const versions = await getInstalledVersions(sandbox);
-			await stopSandboxIfRunning(sandbox);
+			step = 'start_btca';
+			await withStep(step, () => startBtcaServer(createdSandbox));
+
+			step = 'get_versions';
+			const versions = await withStep(step, () => getInstalledVersions(createdSandbox));
+			step = 'stop_sandbox';
+			await withStep(step, () => stopSandboxIfRunning(createdSandbox));
 
 			await ctx.runMutation(instanceMutations.setProvisioned, {
 				instanceId: args.instanceId,
-				sandboxId: sandbox.id,
-				btcaVersion: versions.btcaVersion,
-				opencodeVersion: versions.opencodeVersion
+				sandboxId: createdSandbox.id,
+				btcaVersion: versions.btcaVersion
 			});
 			await ctx.runMutation(instanceMutations.touchActivity, {
 				instanceId: args.instanceId
@@ -272,8 +391,7 @@ export const provision = action({
 					instanceId: args.instanceId,
 					sandboxId: sandbox.id,
 					durationMs,
-					btcaVersion: versions.btcaVersion,
-					opencodeVersion: versions.opencodeVersion
+					btcaVersion: versions.btcaVersion
 				}
 			});
 
@@ -287,15 +405,33 @@ export const provision = action({
 				}
 			}
 
-			const message = getErrorMessage(error);
+			const errorDetails = getErrorDetails(error);
+			const context = getErrorContext(error);
+			const contextStep = typeof context?.step === 'string' ? context.step : step;
+			const message = formatUserMessage('provision', contextStep, errorDetails.message);
 			const durationMs = Date.now() - provisionStartedAt;
+
+			console.error('Provisioning failed', {
+				instanceId: args.instanceId,
+				sandboxId: sandbox?.id,
+				step: contextStep,
+				durationMs,
+				error: errorDetails,
+				context
+			});
 
 			await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
 				distinctId: instance.clerkId,
 				event: AnalyticsEvents.SANDBOX_PROVISIONING_FAILED,
 				properties: {
 					instanceId: args.instanceId,
-					error: message,
+					sandboxId: sandbox?.id,
+					step: contextStep,
+					errorMessage: errorDetails.message,
+					errorName: errorDetails.name,
+					errorStack: errorDetails.stack,
+					errorCode: errorDetails.code,
+					context,
 					durationMs
 				}
 			});
@@ -337,31 +473,24 @@ export const checkVersions = action({
 	args: instanceArgs,
 	returns: v.object({
 		latestBtca: v.optional(v.string()),
-		latestOpencode: v.optional(v.string()),
 		updateAvailable: v.boolean()
 	}),
 	handler: async (ctx, args) => {
 		const instance = await requireInstance(ctx, args.instanceId);
-		const [latestBtca, latestOpencode] = await Promise.all([
-			fetchLatestVersion(BTCA_PACKAGE_NAME),
-			fetchLatestVersion(OPENCODE_PACKAGE_NAME)
-		]);
+		const latestBtca = await fetchLatestVersion(BTCA_PACKAGE_NAME);
 
 		await ctx.runMutation(instanceMutations.setVersions, {
 			instanceId: args.instanceId,
 			latestBtcaVersion: latestBtca,
-			latestOpencodeVersion: latestOpencode,
 			lastVersionCheck: Date.now()
 		});
 
 		const updateAvailable = Boolean(
-			(latestBtca && instance.btcaVersion && latestBtca !== instance.btcaVersion) ||
-			(latestOpencode && instance.opencodeVersion && latestOpencode !== instance.opencodeVersion)
+			latestBtca && instance.btcaVersion && latestBtca !== instance.btcaVersion
 		);
 
 		return {
 			latestBtca,
-			latestOpencode,
 			updateAvailable
 		};
 	}
@@ -427,28 +556,33 @@ async function createSandboxFromScratch(
 ): Promise<{ sandbox: Sandbox; serverUrl: string }> {
 	requireEnv('OPENCODE_API_KEY');
 
-	const resources = await getResourceConfigs(ctx, instanceId);
+	let step = 'load_resources';
+	const resources = await withStep(step, () => getResourceConfigs(ctx, instanceId));
 	const daytona = getDaytona();
-	const sandbox = await daytona.create({
-		snapshot: BTCA_SNAPSHOT_NAME,
-		autoStopInterval: SANDBOX_IDLE_MINUTES,
-		envVars: {
-			NODE_ENV: 'production',
-			OPENCODE_API_KEY: requireEnv('OPENCODE_API_KEY')
-		},
-		public: true
-	});
+	step = 'create_sandbox';
+	const sandbox = await withStep(step, () =>
+		daytona.create({
+			snapshot: BTCA_SNAPSHOT_NAME,
+			autoStopInterval: SANDBOX_IDLE_MINUTES,
+			envVars: {
+				NODE_ENV: 'production',
+				OPENCODE_API_KEY: requireEnv('OPENCODE_API_KEY')
+			},
+			public: true
+		})
+	);
 
-	await uploadBtcaConfig(sandbox, resources);
-	const serverUrl = await startBtcaServer(sandbox);
-
-	const versions = await getInstalledVersions(sandbox);
+	step = 'upload_config';
+	await withStep(step, () => uploadBtcaConfig(sandbox, resources));
+	step = 'start_btca';
+	const serverUrl = await withStep(step, () => startBtcaServer(sandbox));
+	step = 'get_versions';
+	const versions = await withStep(step, () => getInstalledVersions(sandbox));
 
 	await ctx.runMutation(instanceMutations.setProvisioned, {
 		instanceId,
 		sandboxId: sandbox.id,
-		btcaVersion: versions.btcaVersion,
-		opencodeVersion: versions.opencodeVersion
+		btcaVersion: versions.btcaVersion
 	});
 
 	await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
@@ -458,7 +592,6 @@ async function createSandboxFromScratch(
 			instanceId,
 			sandboxId: sandbox.id,
 			btcaVersion: versions.btcaVersion,
-			opencodeVersion: versions.opencodeVersion,
 			createdDuringWake: true
 		}
 	});
@@ -473,6 +606,7 @@ async function wakeInstanceInternal(
 ): Promise<{ serverUrl: string }> {
 	const instance = await requireInstance(ctx, instanceId);
 	const wakeStartedAt = Date.now();
+	let step = 'load_instance';
 
 	await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
 		distinctId: instance.clerkId,
@@ -493,17 +627,23 @@ async function wakeInstanceInternal(
 		let sandboxId: string;
 
 		if (!instance.sandboxId) {
+			step = 'create_sandbox';
 			const result = await createSandboxFromScratch(ctx, instanceId, instance);
 			serverUrl = result.serverUrl;
 			sandboxId = result.sandbox.id;
 		} else {
 			// Use project-specific resources if projectId is provided
+			step = 'load_resources';
 			const resources = await getResourceConfigs(ctx, instanceId, projectId);
 			const daytona = getDaytona();
+			step = 'get_sandbox';
 			const sandbox = await daytona.get(instance.sandboxId);
 
+			step = 'start_sandbox';
 			await ensureSandboxStarted(sandbox);
+			step = 'upload_config';
 			await uploadBtcaConfig(sandbox, resources);
+			step = 'start_btca';
 			serverUrl = await startBtcaServer(sandbox);
 			sandboxId = instance.sandboxId;
 		}
@@ -526,7 +666,20 @@ async function wakeInstanceInternal(
 
 		return { serverUrl };
 	} catch (error) {
-		const message = getErrorMessage(error);
+		const errorDetails = getErrorDetails(error);
+		const context = getErrorContext(error);
+		const contextStep = typeof context?.step === 'string' ? context.step : step;
+		const message = formatUserMessage('wake', contextStep, errorDetails.message);
+
+		console.error('Wake failed', {
+			instanceId,
+			sandboxId: instance.sandboxId,
+			step: contextStep,
+			durationMs: Date.now() - wakeStartedAt,
+			error: errorDetails,
+			context
+		});
+
 		await ctx.runMutation(instanceMutations.setError, { instanceId, errorMessage: message });
 		throw new Error(message);
 	}
@@ -584,9 +737,7 @@ async function updateInstanceInternal(
 		await ctx.runMutation(instanceMutations.setVersions, {
 			instanceId,
 			btcaVersion: versions.btcaVersion,
-			opencodeVersion: versions.opencodeVersion,
 			latestBtcaVersion: versions.btcaVersion,
-			latestOpencodeVersion: versions.opencodeVersion,
 			lastVersionCheck: Date.now()
 		});
 		await ctx.runMutation(instanceMutations.touchActivity, { instanceId });
@@ -597,8 +748,7 @@ async function updateInstanceInternal(
 			properties: {
 				instanceId,
 				sandboxId: instance.sandboxId,
-				btcaVersion: versions.btcaVersion,
-				opencodeVersion: versions.opencodeVersion
+				btcaVersion: versions.btcaVersion
 			}
 		});
 

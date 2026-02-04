@@ -5,20 +5,34 @@
 	import { Bot, Github, Menu, Moon, Sun, X } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
-	import { setShikiStore } from '$lib/stores/ShikiStore.svelte';
+	import { disposeShikiStoreHighlighter, setShikiStore } from '$lib/stores/ShikiStore.svelte';
 	import { setThemeStore } from '$lib/stores/theme.svelte';
 	import { initAnalytics } from '$lib/stores/analytics.svelte';
+	import { disposeChatHighlighter } from '../lib/shiki/chatHighlighter.ts';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
 
+	const teardownShiki = () => {
+		disposeShikiStoreHighlighter();
+		disposeChatHighlighter();
+	};
+
 	onMount(() => {
 		initAnalytics();
+		window.addEventListener('pagehide', teardownShiki);
+		window.addEventListener('beforeunload', teardownShiki);
+		return () => {
+			window.removeEventListener('pagehide', teardownShiki);
+			window.removeEventListener('beforeunload', teardownShiki);
+			teardownShiki();
+		};
 	});
 
 	const isAppRoute = $derived(page.url.pathname.startsWith('/app'));
 	const fullBleed = $derived(page.url.pathname === '/og');
 	const ogImageUrl = $derived(browser ? new URL(ogImage, page.url).href : '');
+	const pathname = $derived(page.url.pathname);
 
 	setShikiStore();
 	const themeStore = setThemeStore();
@@ -32,6 +46,9 @@
 	const toggleNav = () => {
 		mobileNavOpen = !mobileNavOpen;
 	};
+
+	const isActive = (href: string) =>
+		pathname === href || (href !== '/' && pathname.startsWith(href));
 
 	$effect(() => {
 		page.url.pathname;
@@ -91,10 +108,17 @@
 				</a>
 
 				<nav aria-label="Primary" class="hidden items-center gap-1 sm:flex">
-					<a class="bc-navLink" href="/cli">CLI</a>
-					<a class="bc-navLink" href="/web">Web</a>
-					<a class="bc-navLink" href="/pricing">Pricing</a>
-					<a class="bc-navLink" href="/resources">Resources</a>
+					<a class="bc-navLink" href="https://docs.btca.dev" target="_blank" rel="noreferrer">
+						Docs
+					</a>
+					<a class={`bc-navLink ${isActive('/web') ? 'bc-navLink-active' : ''}`} href="/web">Web</a>
+					<a class={`bc-navLink ${isActive('/pricing') ? 'bc-navLink-active' : ''}`} href="/pricing"
+						>Pricing</a
+					>
+					<a
+						class={`bc-navLink ${isActive('/resources') ? 'bc-navLink-active' : ''}`}
+						href="/resources">Resources</a
+					>
 				</nav>
 
 				<div class="flex items-center gap-2">
@@ -145,10 +169,20 @@
 				<div class="bc-container pb-4 sm:hidden">
 					<div class="bc-card bc-ring p-2">
 						<nav aria-label="Mobile" class="flex flex-col">
-							<a class="bc-navLink" href="/cli">CLI</a>
-							<a class="bc-navLink" href="/web">Web</a>
-							<a class="bc-navLink" href="/pricing">Pricing</a>
-							<a class="bc-navLink" href="/resources">Resources</a>
+							<a class="bc-navLink" href="https://docs.btca.dev" target="_blank" rel="noreferrer">
+								Docs
+							</a>
+							<a class={`bc-navLink ${isActive('/web') ? 'bc-navLink-active' : ''}`} href="/web"
+								>Web</a
+							>
+							<a
+								class={`bc-navLink ${isActive('/pricing') ? 'bc-navLink-active' : ''}`}
+								href="/pricing">Pricing</a
+							>
+							<a
+								class={`bc-navLink ${isActive('/resources') ? 'bc-navLink-active' : ''}`}
+								href="/resources">Resources</a
+							>
 							<a class="bc-navLink" href="/app">Go to App</a>
 							<a
 								class="bc-navLink"
@@ -179,19 +213,13 @@
 				</div>
 
 				<div class="flex flex-wrap items-start gap-2 sm:justify-end">
-					<a class="bc-chip" href="/cli">CLI</a>
+					<a class="bc-chip" href="https://docs.btca.dev" target="_blank" rel="noreferrer">
+						Docs
+					</a>
 					<a class="bc-chip" href="/web">Web</a>
 					<a class="bc-chip" href="/pricing">Pricing</a>
 					<a class="bc-chip" href="/resources">Resources</a>
 					<a class="bc-chip" href="/app">Go to App</a>
-					<a
-						class="bc-chip"
-						href="https://github.com/bmdavis419/better-context"
-						target="_blank"
-						rel="noreferrer"
-					>
-						GitHub
-					</a>
 				</div>
 			</div>
 		</footer>

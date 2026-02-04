@@ -1,6 +1,8 @@
+import { stripUserQuestionFromStart, extractCoreQuestion } from '@btca/shared';
+import { Result } from 'better-result';
+
 import { getErrorMessage, getErrorTag } from '../errors.ts';
 import { Metrics } from '../metrics/index.ts';
-import { stripUserQuestionFromStart, extractCoreQuestion } from '@btca/shared';
 import type { AgentLoop } from '../agent/loop.ts';
 
 import type {
@@ -8,6 +10,7 @@ import type {
 	BtcaStreamErrorEvent,
 	BtcaStreamEvent,
 	BtcaStreamMetaEvent,
+	BtcaStreamReasoningDeltaEvent,
 	BtcaStreamTextDeltaEvent,
 	BtcaStreamToolUpdatedEvent
 } from './types.ts';
@@ -34,9 +37,12 @@ export namespace StreamService {
 
 		// Track accumulated text and tool state
 		let accumulatedText = '';
+		let emittedText = '';
+		let accumulatedReasoning = '';
 		const toolsByCallId = new Map<string, Omit<BtcaStreamToolUpdatedEvent, 'type'>>();
 		let textEvents = 0;
 		let toolEvents = 0;
+		let reasoningEvents = 0;
 
 		// Extract the core question for stripping echoed user message from final response
 		const coreQuestion = extractCoreQuestion(args.question);
@@ -52,15 +58,31 @@ export namespace StreamService {
 				emit(controller, args.meta);
 
 				(async () => {
-					try {
+					const result = await Result.tryPromise(async () => {
 						for await (const event of args.eventStream) {
 							switch (event.type) {
 								case 'text-delta': {
 									textEvents += 1;
 									accumulatedText += event.text;
 
-									const msg: BtcaStreamTextDeltaEvent = {
-										type: 'text.delta',
+									const nextText = stripUserQuestionFromStart(accumulatedText, coreQuestion);
+									const delta = nextText.slice(emittedText.length);
+									if (delta) {
+										emittedText = nextText;
+										const msg: BtcaStreamTextDeltaEvent = {
+											type: 'text.delta',
+											delta
+										};
+										emit(controller, msg);
+									}
+									break;
+								}
+
+								case 'reasoning-delta': {
+									reasoningEvents += 1;
+									accumulatedReasoning += event.text;
+									const msg: BtcaStreamReasoningDeltaEvent = {
+										type: 'reasoning.delta',
 										delta: event.text
 									};
 									emit(controller, msg);
@@ -121,21 +143,24 @@ export namespace StreamService {
 									const tools = Array.from(toolsByCallId.values());
 
 									// Strip the echoed user question from the final text
-									let finalText = stripUserQuestionFromStart(accumulatedText, coreQuestion);
+									const finalText = stripUserQuestionFromStart(accumulatedText, coreQuestion);
+									emittedText = finalText;
 
 									Metrics.info('stream.done', {
 										collectionKey: args.meta.collection.key,
 										textLength: finalText.length,
+										reasoningLength: accumulatedReasoning.length,
 										toolCount: tools.length,
 										textEvents,
 										toolEvents,
+										reasoningEvents,
 										finishReason: event.finishReason
 									});
 
 									const done: BtcaStreamDoneEvent = {
 										type: 'done',
 										text: finalText,
-										reasoning: '', // We don't have reasoning in the new format
+										reasoning: accumulatedReasoning,
 										tools
 									};
 									emit(controller, done);
@@ -157,18 +182,25 @@ export namespace StreamService {
 								}
 							}
 						}
-					} catch (cause) {
-						Metrics.error('stream.error', {
-							collectionKey: args.meta.collection.key,
-							error: Metrics.errorInfo(cause)
-						});
-						const err: BtcaStreamErrorEvent = {
-							type: 'error',
-							tag: getErrorTag(cause),
-							message: getErrorMessage(cause)
-						};
-						emit(controller, err);
-					} finally {
+					});
+
+					result.match({
+						ok: () => undefined,
+						err: (cause) => {
+							Metrics.error('stream.error', {
+								collectionKey: args.meta.collection.key,
+								error: Metrics.errorInfo(cause)
+							});
+							const err: BtcaStreamErrorEvent = {
+								type: 'error',
+								tag: getErrorTag(cause),
+								message: getErrorMessage(cause)
+							};
+							emit(controller, err);
+						}
+					});
+
+					{
 						Metrics.info('stream.closed', { collectionKey: args.meta.collection.key });
 						controller.close();
 					}

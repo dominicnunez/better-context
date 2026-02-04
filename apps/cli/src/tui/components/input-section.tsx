@@ -8,8 +8,9 @@ import { MainInput } from './main-input.tsx';
 import { StatusBar } from './status-bar.tsx';
 import { CommandPalette } from './command-palette.tsx';
 import { RepoMentionPalette } from './repo-mention-palette.tsx';
-import { BlessedModelSelect } from './blessed-model-select.tsx';
+import { ConnectWizard } from './connect-wizard.tsx';
 import { AddResourceWizard } from './add-resource-wizard.tsx';
+import { ResumeThreadModal } from './resume-thread-modal.tsx';
 import { inputHistory } from '../history.ts';
 
 export const InputSection: Component = () => {
@@ -107,7 +108,7 @@ export const InputSection: Component = () => {
 		}
 		if (invalidRepos.length > 0) {
 			messages.addSystemMessage(
-				`Repo(s) not found: ${invalidRepos.join(', ')}. Configure resources in your btca config.`
+				`Repo(s) not found: ${invalidRepos.join(', ')}. Configure resources with "btca add".`
 			);
 			return;
 		}
@@ -129,8 +130,9 @@ export const InputSection: Component = () => {
 	const handleCommandExecute = (command: { mode: string }) => {
 		setInputState([]);
 		switch (command.mode) {
-			case 'select-blessed-model':
-				setActiveWizard('blessed-model');
+			case 'connect':
+				setActiveWizard('connect');
+				setCurrentWizardStep('provider');
 				break;
 			case 'add-repo':
 				setActiveWizard('add-repo');
@@ -139,6 +141,13 @@ export const InputSection: Component = () => {
 			case 'clear':
 				messages.clearMessages();
 				messages.addSystemMessage('Chat cleared.');
+				break;
+			case 'resume':
+				if (messages.isStreaming()) {
+					messages.addSystemMessage('Cannot resume while streaming.');
+					return;
+				}
+				setActiveWizard('resume');
 				break;
 		}
 	};
@@ -191,12 +200,24 @@ export const InputSection: Component = () => {
 			}
 		}
 		// Up arrow - navigate to previous history entry
-		if (key.name === 'up' && !isAnyWizardOpen() && !messages.isStreaming()) {
+		if (
+			key.name === 'up' &&
+			!isAnyWizardOpen() &&
+			!messages.isStreaming() &&
+			cursorIsCurrentlyIn() !== 'command' &&
+			cursorIsCurrentlyIn() !== 'mention'
+		) {
 			const entry = inputHistory.navigateUp(inputState());
 			setInputFromHistory(entry);
 		}
 		// Down arrow - navigate to next history entry
-		if (key.name === 'down' && !isAnyWizardOpen() && !messages.isStreaming()) {
+		if (
+			key.name === 'down' &&
+			!isAnyWizardOpen() &&
+			!messages.isStreaming() &&
+			cursorIsCurrentlyIn() !== 'command' &&
+			cursorIsCurrentlyIn() !== 'mention'
+		) {
 			const entry = inputHistory.navigateDown();
 			setInputFromHistory(entry);
 		}
@@ -239,11 +260,20 @@ export const InputSection: Component = () => {
 			</Show>
 
 			{/* Wizards */}
-			<Show when={activeWizard() === 'blessed-model'}>
-				<BlessedModelSelect onClose={closeWizard} />
+			<Show when={activeWizard() === 'connect'}>
+				<ConnectWizard onClose={closeWizard} onStepChange={setCurrentWizardStep} />
 			</Show>
 			<Show when={activeWizard() === 'add-repo'}>
 				<AddResourceWizard onClose={closeWizard} onStepChange={setCurrentWizardStep} />
+			</Show>
+			<Show when={activeWizard() === 'resume'}>
+				<ResumeThreadModal
+					onClose={closeWizard}
+					onSelect={async (threadId) => {
+						await messages.resumeThread(threadId);
+						closeWizard();
+					}}
+				/>
 			</Show>
 
 			<StatusBar

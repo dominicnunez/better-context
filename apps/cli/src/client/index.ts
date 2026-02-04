@@ -1,3 +1,4 @@
+import { Result } from 'better-result';
 import { hc } from 'hono/client';
 import type { AppType } from 'btca-server';
 
@@ -25,15 +26,17 @@ async function parseErrorResponse(
 	res: { json: () => Promise<unknown> },
 	fallbackMessage: string
 ): Promise<BtcaError> {
-	try {
-		const body = (await res.json()) as { error?: string; hint?: string; tag?: string };
-		return new BtcaError(body.error ?? fallbackMessage, {
-			hint: body.hint,
-			tag: body.tag
-		});
-	} catch {
-		return new BtcaError(fallbackMessage);
-	}
+	const result = await Result.tryPromise(() => res.json());
+	return result.match({
+		ok: (body) => {
+			const parsed = body as { error?: string; hint?: string; tag?: string };
+			return new BtcaError(parsed.error ?? fallbackMessage, {
+				hint: parsed.hint,
+				tag: parsed.tag
+			});
+		},
+		err: () => new BtcaError(fallbackMessage)
+	});
 }
 
 /**
@@ -100,30 +103,6 @@ export async function askQuestion(
 }
 
 /**
- * Get OpenCode instance URL for a collection
- */
-export async function getOpencodeInstance(
-	client: Client,
-	options: {
-		resources?: string[];
-		quiet?: boolean;
-	}
-) {
-	const res = await client.opencode.$post({
-		json: {
-			resources: options.resources,
-			quiet: options.quiet
-		}
-	});
-
-	if (!res.ok) {
-		throw await parseErrorResponse(res, `Failed to get opencode instance: ${res.status}`);
-	}
-
-	return res.json();
-}
-
-/**
  * Ask a question (streaming) - returns the raw Response for SSE parsing
  */
 export async function askQuestionStream(
@@ -159,17 +138,27 @@ export async function askQuestionStream(
 /**
  * Update model configuration
  */
+export type ProviderOptionsInput = {
+	baseURL?: string;
+	name?: string;
+};
+
 export async function updateModel(
 	baseUrl: string,
 	provider: string,
-	model: string
+	model: string,
+	providerOptions?: ProviderOptionsInput
 ): Promise<{ provider: string; model: string }> {
 	const res = await fetch(`${baseUrl}/config/model`, {
 		method: 'PUT',
 		headers: {
 			'Content-Type': 'application/json'
 		},
-		body: JSON.stringify({ provider, model })
+		body: JSON.stringify({
+			provider,
+			model,
+			...(providerOptions ? { providerOptions } : {})
+		})
 	});
 
 	if (!res.ok) {

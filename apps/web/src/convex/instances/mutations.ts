@@ -62,7 +62,6 @@ export const setProvisioned = mutation({
 		instanceId: v.id('instances'),
 		sandboxId: v.string(),
 		btcaVersion: v.optional(v.string()),
-		opencodeVersion: v.optional(v.string()),
 		storageUsedBytes: v.optional(v.number())
 	},
 	returns: v.null(),
@@ -72,7 +71,6 @@ export const setProvisioned = mutation({
 			state: 'stopped';
 			provisionedAt: number;
 			btcaVersion?: string;
-			opencodeVersion?: string;
 			storageUsedBytes?: number;
 		} = {
 			sandboxId: args.sandboxId,
@@ -82,10 +80,6 @@ export const setProvisioned = mutation({
 
 		if (args.btcaVersion !== undefined) {
 			patch.btcaVersion = args.btcaVersion;
-		}
-
-		if (args.opencodeVersion !== undefined) {
-			patch.opencodeVersion = args.opencodeVersion;
 		}
 
 		if (args.storageUsedBytes !== undefined) {
@@ -152,18 +146,14 @@ export const setVersions = mutation({
 	args: {
 		instanceId: v.id('instances'),
 		btcaVersion: v.optional(v.string()),
-		opencodeVersion: v.optional(v.string()),
 		latestBtcaVersion: v.optional(v.string()),
-		latestOpencodeVersion: v.optional(v.string()),
 		lastVersionCheck: v.optional(v.number())
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const patch: {
 			btcaVersion?: string;
-			opencodeVersion?: string;
 			latestBtcaVersion?: string;
-			latestOpencodeVersion?: string;
 			lastVersionCheck: number;
 		} = {
 			lastVersionCheck: args.lastVersionCheck ?? Date.now()
@@ -173,16 +163,8 @@ export const setVersions = mutation({
 			patch.btcaVersion = args.btcaVersion;
 		}
 
-		if (args.opencodeVersion !== undefined) {
-			patch.opencodeVersion = args.opencodeVersion;
-		}
-
 		if (args.latestBtcaVersion !== undefined) {
 			patch.latestBtcaVersion = args.latestBtcaVersion;
-		}
-
-		if (args.latestOpencodeVersion !== undefined) {
-			patch.latestOpencodeVersion = args.latestOpencodeVersion;
 		}
 
 		await ctx.db.patch(args.instanceId, patch);

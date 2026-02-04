@@ -46,6 +46,9 @@ Options:
 
 - `-r, --resource <name...>` - Resources to search (can specify multiple)
 - `-q, --question <text>` - Question to ask (required)
+- `--no-thinking` - Hide reasoning output
+- `--no-tools` - Hide tool-call traces
+- `--sub-agent` - Emit clean output (no reasoning or tool traces)
 
 Examples:
 
@@ -58,14 +61,6 @@ btca ask --resource react --resource typescript --question "How do I type useSta
 
 # Using @mentions in question
 btca ask --question "@svelte @tailwind How do I style components?"
-```
-
-### OpenCode TUI Session
-
-Start an interactive OpenCode session with resource context:
-
-```bash
-btca chat --resource svelte --resource effect
 ```
 
 ### Start Server
@@ -89,32 +84,47 @@ btca uses a config file at `~/.config/btca/btca.config.jsonc`. Manage configurat
 ### Set Model
 
 ```bash
-btca config model --provider opencode --model claude-haiku-4-5
+btca connect --provider opencode --model claude-haiku-4-5
 ```
+
+#### OpenAI-compatible providers
+
+To use an OpenAI-compatible server (e.g., LM Studio), run:
+
+```bash
+btca connect --provider openai-compat
+```
+
+You will be prompted for:
+
+- Base URL: the root URL of your OpenAI-compatible server.
+- Provider name: the AI SDK provider identifier.
+- Model ID: the model to use for requests (stored as `model` in `btca.config.jsonc`).
+- API key (optional): only if your server requires authentication.
 
 ### List Resources
 
 ```bash
-btca config resources list
+btca resources
 ```
 
 ### Add Resource
 
 ```bash
 # Add a git repository
-btca config resources add --name effect --type git --url https://github.com/Effect-TS/effect --branch main
+btca add --name effect --type git --url https://github.com/Effect-TS/effect --branch main
 
 # Add with search path (focus on specific subdirectory)
-btca config resources add --name svelte --type git --url https://github.com/sveltejs/svelte.dev --branch main --search-path apps/svelte.dev
+btca add --name svelte --type git --url https://github.com/sveltejs/svelte.dev --branch main --search-path apps/svelte.dev
 
 # Add a local directory
-btca config resources add --name myproject --type local --path /path/to/project
+btca add --name myproject --type local --path /path/to/project
 ```
 
 ### Remove Resource
 
 ```bash
-btca config resources remove --name effect
+btca remove effect
 ```
 
 ### Clear Cached Resources
@@ -134,6 +144,16 @@ btca --server http://localhost:3000
 # Specify port for auto-started server
 btca --port 3001
 ```
+
+## OpenCode MCP Plugin
+
+Download the official OpenCode MCP config template and add your API key:
+
+```bash
+curl -fsSL https://btca.dev/opencode-mcp.json -o opencode.json
+```
+
+Then replace `YOUR_API_KEY` with your MCP API key (see `btca remote mcp` or the web dashboard).
 
 ## TUI Commands
 

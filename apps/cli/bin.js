@@ -7,6 +7,7 @@ if (typeof Bun === 'undefined') {
 }
 
 import path from 'node:path';
+import { chmod, stat } from 'node:fs/promises';
 
 const PLATFORM_ARCH = `${process.platform}-${process.arch}`;
 
@@ -33,11 +34,33 @@ const binPath = path.join(__dirname, 'dist', binaryName);
 const binFile = Bun.file(binPath);
 
 if (!(await binFile.exists())) {
-	console.error(
-		`[btca] Prebuilt binary not found for ${PLATFORM_ARCH}. ` +
-			'Try reinstalling, or open an issue if the problem persists.'
-	);
+	const glob = new Bun.Glob('dist/*');
+	const entries = [];
+	for await (const entry of glob.scan({ cwd: __dirname })) {
+		entries.push(entry.replace(/^dist\//, ''));
+	}
+	const available = entries.length
+		? `Available binaries: ${entries.join(', ')}`
+		: 'No binaries found in dist/.';
+	console.error(`[btca] Prebuilt binary not found for ${PLATFORM_ARCH} (${binaryName}).`);
+	console.error(`[btca] ${available}`);
+	console.error('[btca] Try reinstalling, or open an issue if the problem persists.');
 	process.exit(1);
+}
+
+if (process.platform !== 'win32') {
+	try {
+		const fileStats = await stat(binPath);
+		if ((fileStats.mode & 0o111) === 0) {
+			await chmod(binPath, fileStats.mode | 0o111);
+		}
+	} catch {
+		try {
+			await chmod(binPath, 0o755);
+		} catch {
+			// If chmod fails, continue and let spawn report the error.
+		}
+	}
 }
 
 const result = Bun.spawnSync([binPath, ...process.argv.slice(2)], {

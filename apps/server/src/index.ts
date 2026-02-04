@@ -1,3 +1,4 @@
+import { Result } from 'better-result';
 import { Hono } from 'hono';
 import type { Context as HonoContext, Next } from 'hono';
 import { z } from 'zod';
@@ -27,7 +28,6 @@ import { VirtualFs } from './vfs/virtual-fs.ts';
  * GET  /resources         - Lists all configured resources
  * POST /question          - Ask a question (non-streaming)
  * POST /question/stream   - Ask a question (streaming SSE response)
- * POST /opencode          - Get OpenCode instance URL for a collection
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,17 +81,6 @@ const QuestionRequestSchema = z.object({
 	quiet: z.boolean().optional()
 });
 
-const OpencodeRequestSchema = z.object({
-	resources: z
-		.array(ResourceNameField)
-		.max(
-			LIMITS.MAX_RESOURCES_PER_REQUEST,
-			`Too many resources (max ${LIMITS.MAX_RESOURCES_PER_REQUEST})`
-		)
-		.optional(),
-	quiet: z.boolean().optional()
-});
-
 const UpdateModelRequestSchema = z.object({
 	provider: z
 		.string()
@@ -102,7 +91,13 @@ const UpdateModelRequestSchema = z.object({
 		.string()
 		.min(1, 'Model name cannot be empty')
 		.max(LIMITS.MODEL_NAME_MAX)
-		.regex(SAFE_NAME_REGEX, 'Invalid model name format')
+		.regex(SAFE_NAME_REGEX, 'Invalid model name format'),
+	providerOptions: z
+		.object({
+			baseURL: z.string().optional(),
+			name: z.string().optional()
+		})
+		.optional()
 });
 
 /**
@@ -119,10 +114,30 @@ const AddGitResourceRequestSchema = z.object({
 	specialNotes: GitResourceSchema.shape.specialNotes
 });
 
+const isWsl = () =>
+	process.platform === 'linux' &&
+	(Boolean(process.env.WSL_DISTRO_NAME) ||
+		Boolean(process.env.WSL_INTEROP) ||
+		Boolean(process.env.WSLENV));
+
+const normalizeWslPath = (value: string) => {
+	if (!isWsl()) return value;
+	const match = value.match(/^([a-zA-Z]):\\(.*)$/);
+	if (!match) return value;
+	const drive = match[1]!.toLowerCase();
+	const rest = match[2]!.replace(/\\/g, '/');
+	return `/mnt/${drive}/${rest}`;
+};
+
+const LocalPathRequestSchema = z.preprocess(
+	(value) => (typeof value === 'string' ? normalizeWslPath(value) : value),
+	LocalResourceSchema.shape.path
+) as z.ZodType<string>;
+
 const AddLocalResourceRequestSchema = z.object({
 	type: z.literal('local'),
 	name: LocalResourceSchema.shape.name,
-	path: LocalResourceSchema.shape.path,
+	path: LocalPathRequestSchema,
 	specialNotes: LocalResourceSchema.shape.specialNotes
 });
 
@@ -148,16 +163,17 @@ class RequestError extends Error {
 }
 
 const decodeJson = async <T>(req: Request, schema: z.ZodType<T>): Promise<T> => {
-	let body: unknown;
-	try {
-		body = await req.json();
-	} catch (cause) {
-		throw new RequestError('Failed to parse request JSON', cause);
-	}
-
-	const parsed = schema.safeParse(body);
-	if (!parsed.success) throw new RequestError('Invalid request body', parsed.error);
-	return parsed.data;
+	const bodyResult = await Result.tryPromise(() => req.json());
+	return bodyResult.match({
+		ok: (body) => {
+			const parsed = schema.safeParse(body);
+			if (!parsed.success) throw new RequestError('Invalid request body', parsed.error);
+			return parsed.data;
+		},
+		err: (cause) => {
+			throw new RequestError('Failed to parse request JSON', cause);
+		}
+	});
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,7 +218,8 @@ const createApp = (deps: {
 				tag === 'ConfigError' ||
 				tag === 'InvalidProviderError' ||
 				tag === 'InvalidModelError' ||
-				tag === 'ProviderNotConnectedError'
+				tag === 'ProviderNotConnectedError' ||
+				tag === 'ProviderOptionsError'
 					? 400
 					: 500;
 			return c.json({ error: message, tag, ...(hint && { hint }) }, status);
@@ -359,62 +376,14 @@ const createApp = (deps: {
 			});
 		})
 
-		// POST /opencode - Get OpenCode instance URL for a collection
-		.post('/opencode', async (c: HonoContext) => {
-			const decoded = await decodeJson(c.req.raw, OpencodeRequestSchema);
-			const resourceNames =
-				decoded.resources && decoded.resources.length > 0
-					? decoded.resources
-					: config.resources.map((r) => r.name);
-
-			const collectionKey = getCollectionKey(resourceNames);
-			Metrics.info('opencode.requested', {
-				quiet: decoded.quiet ?? false,
-				resources: resourceNames,
-				collectionKey
-			});
-
-			const collection = await collections.load({ resourceNames, quiet: decoded.quiet });
-			Metrics.info('collection.ready', { collectionKey, path: collection.path });
-
-			const { url, model, instanceId } = await agent.getOpencodeInstance({ collection });
-			Metrics.info('opencode.ready', { collectionKey, url, instanceId });
-
-			return c.json({
-				url,
-				model,
-				instanceId,
-				resources: resourceNames,
-				collection: { key: collectionKey, path: collection.path }
-			});
-		})
-
-		// GET /opencode/instances - List all active OpenCode instances
-		.get('/opencode/instances', (c: HonoContext) => {
-			const instances = agent.listInstances();
-			return c.json({ instances, count: instances.length });
-		})
-
-		// DELETE /opencode/instances - Close all OpenCode instances
-		.delete('/opencode/instances', async (c: HonoContext) => {
-			const result = await agent.closeAllInstances();
-			return c.json(result);
-		})
-
-		// DELETE /opencode/:id - Close a specific OpenCode instance
-		.delete('/opencode/:id', async (c: HonoContext) => {
-			const instanceId = c.req.param('id');
-			const result = await agent.closeInstance(instanceId);
-			if (!result.closed) {
-				return c.json({ error: 'Instance not found', instanceId }, 404);
-			}
-			return c.json({ closed: true, instanceId });
-		})
-
 		// PUT /config/model - Update model configuration
 		.put('/config/model', async (c: HonoContext) => {
 			const decoded = await decodeJson(c.req.raw, UpdateModelRequestSchema);
-			const result = await config.updateModel(decoded.provider, decoded.model);
+			const result = await config.updateModel(
+				decoded.provider,
+				decoded.model,
+				decoded.providerOptions
+			);
 			return c.json(result);
 		})
 
@@ -527,7 +496,6 @@ export const startServer = async (options: StartServerOptions = {}): Promise<Ser
 		port: actualPort,
 		url: `http://localhost:${actualPort}`,
 		stop: () => {
-			void agent.closeAllInstances();
 			VirtualFs.disposeAll();
 			clearAllVirtualCollectionMetadata();
 			server.stop();

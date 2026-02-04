@@ -10,7 +10,7 @@ Ask your AI agent questions about libraries and frameworks by searching the actu
 
 ```bash
 bun add -g btca opencode-ai
-btca config model --provider opencode --model claude-haiku-4-5
+btca connect --provider opencode --model claude-haiku-4-5
 ```
 
 ## Usage
@@ -31,7 +31,7 @@ Paste this into your AI coding agent to set up btca for your project:
 Set up btca for this project: scan package.json for major dependencies (frameworks, libraries, tools), suggest adding each as a btca resource with sensible defaults, then create a btca.config.jsonc file in the project root and update AGENTS.md with usage instructions. Ask me to confirm each resource before adding.
 ```
 
-See the full [Getting Started guide](https://btca.dev/getting-started) for more details.
+See the full [Getting Started guide](https://docs.btca.dev/guides/quickstart) for more details.
 
 ## Development
 
@@ -106,3 +106,16 @@ All scripts use Turborepo for caching. Run from the repository root.
 | `btca-sandbox`          | `apps/sandbox`         | Sandbox environment          |
 | `@btca/shared`          | `packages/shared`      | Shared utilities             |
 | `@btca/analytics-proxy` | `apps/analytics-proxy` | PostHog analytics proxy      |
+
+## model recs...
+
+**openai**
+
+- "gpt-5.2-codex"
+
+**opencode**
+
+- "claude-sonnet-4-5"
+- "claude-haiku-4-5"
+- "gemini-3-flash"
+- "minimax-m2.1"

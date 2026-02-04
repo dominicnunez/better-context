@@ -1,7 +1,7 @@
 {
 	"name": "btca",
 	"author": "Ben Davis",
-	"version": "1.0.70",
+	"version": "1.0.83",
 	"homepage": "https://btca.dev",
 	"description": "CLI tool for asking questions about technologies using btca server",
 	"type": "module",
@@ -36,7 +36,8 @@
 		"check": "tsgo --noEmit",
 		"format": "prettier --write .",
 		"dev": "bun run src/index.ts",
-		"build": "bun run scripts/build-binaries.ts"
+		"build": "bun run scripts/build-binaries.ts",
+		"prepublishOnly": "bun run scripts/verify-dist.ts"
 	},
 	"devDependencies": {
 		"@btca/shared": "workspace:*",
@@ -53,5 +54,9 @@
 		"prettier": "^3.7.4",
 		"shiki": "^3.20.0",
 		"solid-js": "^1.9.10"
+	},
+	"dependencies": {
+		"@inquirer/select": "^5.0.4",
+		"better-result": "^2.6.0"
 	}
 }

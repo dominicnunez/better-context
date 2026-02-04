@@ -7,7 +7,7 @@
 It ships:
 - A CLI (built with Effect + Bun)
 - An interactive terminal UI (TUI) for multi-resource Q&A
-- This docs website (`btca.dev`)
+- The docs website (`docs.btca.dev`)
 
 ## What btca can do
 
@@ -23,13 +23,11 @@ It ships:
 - Ask a question:
   - `btca ask --resource svelte --question 'How do runes work in Svelte 5?'`
 - Run the interactive TUI:
-  - `btca chat`
-- Print config path:
-  - `btca config`
+  - `btca`
 
 ## Command reference (CLI)
 
-- `btca` (no args): print version info.
+- `btca` (no args): launch the interactive TUI.
 - `btca --help`: show help.
 - `btca --version` / `btca -v`: print version.
 
@@ -38,48 +36,29 @@ It ships:
   - `--resource` can be repeated for multiple resources.
   - Supports @mentions in the question to specify resources.
 
-- `btca chat [--resource <resource>...]`
-  - Launch the interactive TUI for multi-turn conversation.
-
-- `btca config`
-  - Prints the config file path and available subcommands.
-
-- `btca config model`
-  - Show current provider/model.
-- `btca config model --provider <provider> --model <model>`
-  - Set provider/model (both must be provided together).
-
-- `btca config resources list`
+- `btca resources`
   - List configured resources.
-- `btca config resources add --name <name> --type <type> [--url <url>] [--branch <branch>] [--path <path>] [--notes '<specialNotes>'] [--search-path '<path>']`
+
+- `btca connect`
+  - Configure provider/model interactively or via flags.
+
+- `btca add --name <name> --type <type> [--url <url>] [--branch <branch>] [--path <path>] [--notes '<specialNotes>'] [--search-path '<path>']`
   - Add a resource. Type is `git` (default) or `local`.
   - Git resources require `--url <url>`, optional `--branch <branch>` (default: main).
   - Local resources require `--path <path>`.
-- `btca config resources remove [--name <name>]`
+- `btca remove [name]`
   - Remove a resource from config (with confirmation).
 
-- `btca config collections list`
-  - List all indexed collections.
-- `btca config collections clear [--key <key>]`
-  - Clear all collections, or a specific one with `--key`.
-
-- `btca config threads list`
-  - List conversation threads.
-- `btca config threads delete [--id <id>]`
-  - Delete a thread.
+- `btca clear`
+  - Clear all locally cloned resources.
+- `btca serve --port <port>`
+  - Start the local server.
 
 ## Command reference (built-in TUI)
 
 In the TUI you typically:
 - Ask: `@resource Your question here`
-- Use slash commands (via `/`):
-  - `/add` (resource wizard)
-  - `/remove` (remove resource from config)
-  - `/model` (pick a recommended model)
-  - `/custom` (set custom provider/model)
-  - `/clear` (clear chat history)
-
-The TUI streams the answer and copies it to your clipboard on completion.
+- Use the command palette for: connect, add, clear, resume
 
 ## Configuration (`~/.config/btca/btca.json`)
 
@@ -93,11 +72,12 @@ Key fields:
   - `searchPath` (optional, git only): limit search to a subdirectory
 - `provider` + `model`: provider/model IDs used for answers
 
-## Documentation (btca.dev)
+## Documentation (docs.btca.dev)
 
-- [Getting started](https://btca.dev/getting-started): install, defaults, config example
-- [Commands](https://btca.dev/commands): command list + examples
-- [Models](https://btca.dev/models): recommended models + provider setup links
+- [Quickstart](https://docs.btca.dev/guides/quickstart): install, connect, first question
+- [Authentication](https://docs.btca.dev/guides/authentication): provider auth + keys
+- [Configuration](https://docs.btca.dev/guides/configuration): config file + resources
+- [API reference](https://docs.btca.dev/api-reference/introduction): endpoints and schema
 
 ## Source code & repo layout
 

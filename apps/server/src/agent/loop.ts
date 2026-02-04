@@ -5,12 +5,14 @@
 import { streamText, tool, stepCountIs, type ModelMessage } from 'ai';
 
 import { Model } from '../providers/index.ts';
+import type { ProviderOptions } from '../providers/registry.ts';
 import { ReadTool, GrepTool, GlobTool, ListTool } from '../tools/index.ts';
 
 export namespace AgentLoop {
 	// Event types for streaming
 	export type AgentEvent =
 		| { type: 'text-delta'; text: string }
+		| { type: 'reasoning-delta'; text: string }
 		| { type: 'tool-call'; toolName: string; input: unknown }
 		| { type: 'tool-result'; toolName: string; output: string }
 		| {
@@ -29,6 +31,7 @@ export namespace AgentLoop {
 		agentInstructions: string;
 		question: string;
 		maxSteps?: number;
+		providerOptions?: Partial<ProviderOptions>;
 	};
 
 	// Result type
@@ -131,8 +134,19 @@ export namespace AgentLoop {
 			maxSteps = 40
 		} = options;
 
+		const systemPrompt = buildSystemPrompt(agentInstructions);
+		const sessionId = crypto.randomUUID();
+
+		const mergedProviderOptions =
+			providerId === 'openai'
+				? { ...options.providerOptions, instructions: systemPrompt, sessionId }
+				: options.providerOptions;
+
 		// Get the model
-		const model = await Model.getModel(providerId, modelId);
+		const model = await Model.getModel(providerId, modelId, {
+			providerOptions: mergedProviderOptions,
+			allowMissingAuth: providerId === 'openai-compat'
+		});
 
 		// Get initial context
 		const initialContext = await getInitialContext(collectionPath, vfsId);
@@ -155,9 +169,13 @@ export namespace AgentLoop {
 		// Run streamText with tool execution
 		const result = streamText({
 			model,
-			system: buildSystemPrompt(agentInstructions),
+			system: systemPrompt,
 			messages,
 			tools,
+			providerOptions:
+				providerId === 'openai'
+					? { openai: { instructions: systemPrompt, store: false } }
+					: undefined,
 			stopWhen: stepCountIs(maxSteps)
 		});
 
@@ -167,6 +185,10 @@ export namespace AgentLoop {
 				case 'text-delta':
 					fullText += part.text;
 					events.push({ type: 'text-delta', text: part.text });
+					break;
+
+				case 'reasoning-delta':
+					events.push({ type: 'reasoning-delta', text: part.text });
 					break;
 
 				case 'tool-call':
@@ -226,8 +248,19 @@ export namespace AgentLoop {
 			maxSteps = 40
 		} = options;
 
+		const systemPrompt = buildSystemPrompt(agentInstructions);
+		const sessionId = crypto.randomUUID();
+
+		const mergedProviderOptions =
+			providerId === 'openai'
+				? { ...options.providerOptions, instructions: systemPrompt, sessionId }
+				: options.providerOptions;
+
 		// Get the model
-		const model = await Model.getModel(providerId, modelId);
+		const model = await Model.getModel(providerId, modelId, {
+			providerOptions: mergedProviderOptions,
+			allowMissingAuth: providerId === 'openai-compat'
+		});
 
 		// Get initial context
 		const initialContext = await getInitialContext(collectionPath, vfsId);
@@ -246,9 +279,13 @@ export namespace AgentLoop {
 		// Run streamText with tool execution
 		const result = streamText({
 			model,
-			system: buildSystemPrompt(agentInstructions),
+			system: systemPrompt,
 			messages,
 			tools,
+			providerOptions:
+				providerId === 'openai'
+					? { openai: { instructions: systemPrompt, store: false } }
+					: undefined,
 			stopWhen: stepCountIs(maxSteps)
 		});
 
@@ -257,6 +294,10 @@ export namespace AgentLoop {
 			switch (part.type) {
 				case 'text-delta':
 					yield { type: 'text-delta', text: part.text };
+					break;
+
+				case 'reasoning-delta':
+					yield { type: 'reasoning-delta', text: part.text };
 					break;
 
 				case 'tool-call':

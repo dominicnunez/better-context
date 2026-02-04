@@ -1,16 +1,21 @@
+import { Result } from 'better-result';
+import type { BtcaStreamEvent } from 'btca-server/stream/types';
+
 import {
 	createClient,
 	getConfig,
 	getResources,
+	getProviders as getProvidersClient,
 	askQuestionStream,
 	updateModel as updateModelClient,
 	addResource as addResourceClient,
 	removeResource as removeResourceClient,
+	type ProviderOptionsInput,
 	type ResourceInput
 } from '../client/index.ts';
 import { parseSSEStream } from '../client/stream.ts';
-import type { BtcaStreamEvent } from 'btca-server/stream/types';
 import type { Repo, BtcaChunk } from './types.ts';
+import { trackTelemetryEvent } from '../lib/telemetry.ts';
 
 // Get server URL from global (set by TUI launcher)
 const getServerUrl = (): string => {
@@ -60,6 +65,14 @@ export const services = {
 	},
 
 	/**
+	 * Get provider connection status
+	 */
+	getProviders: async () => {
+		const client = createClient(getServerUrl());
+		return getProvidersClient(client);
+	},
+
+	/**
 	 * Ask a question across multiple resources
 	 */
 	askQuestion: async (
@@ -84,15 +97,15 @@ export const services = {
 		const chunksById = new Map<string, BtcaChunk>();
 		const chunkOrder: string[] = [];
 
-		try {
+		const streamResult = await Result.tryPromise(async () => {
 			for await (const event of parseSSEStream(response)) {
 				if (signal.aborted) break;
 				processStreamEvent(event, chunksById, chunkOrder, onChunkUpdate);
 			}
-		} catch (error) {
-			if (error instanceof Error && error.name === 'AbortError') {
-				// Request was canceled, return what we have
-			} else {
+		});
+		if (streamResult.isErr()) {
+			const error = streamResult.error;
+			if (!(error instanceof Error && error.name === 'AbortError')) {
 				throw error;
 			}
 		}
@@ -108,15 +121,23 @@ export const services = {
 		if (currentAbortController) {
 			currentAbortController.abort();
 			currentAbortController = null;
+			await trackTelemetryEvent({
+				event: 'cli_stream_cancelled',
+				properties: { command: 'btca', mode: 'tui' }
+			});
 		}
 	},
 
 	/**
 	 * Update model configuration
 	 */
-	updateModel: async (provider: string, model: string): Promise<ModelUpdateResult> => {
+	updateModel: async (
+		provider: string,
+		model: string,
+		providerOptions?: ProviderOptionsInput
+	): Promise<ModelUpdateResult> => {
 		const serverUrl = getServerUrl();
-		return updateModelClient(serverUrl, provider, model);
+		return updateModelClient(serverUrl, provider, model, providerOptions);
 	},
 
 	/**
@@ -142,6 +163,11 @@ function processStreamEvent(
 	chunkOrder: string[],
 	onChunkUpdate: (update: ChunkUpdate) => void
 ): void {
+	const streamOptions = globalThis.__BTCA_STREAM_OPTIONS__ ?? {
+		showThinking: true,
+		showTools: true
+	};
+
 	switch (event.type) {
 		case 'text.delta': {
 			// Accumulate text deltas into a single text chunk
@@ -160,6 +186,7 @@ function processStreamEvent(
 		}
 
 		case 'reasoning.delta': {
+			if (!streamOptions.showThinking) return;
 			// Accumulate reasoning deltas
 			const reasoningChunkId = '__reasoning__';
 			const existing = chunksById.get(reasoningChunkId);
@@ -176,6 +203,7 @@ function processStreamEvent(
 		}
 
 		case 'tool.updated': {
+			if (!streamOptions.showTools) return;
 			const existing = chunksById.get(event.callID);
 			const state =
 				event.state.status === 'pending'
