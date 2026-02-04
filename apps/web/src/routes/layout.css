@@ -30,9 +30,9 @@
 	:root {
 		color-scheme: light;
 
-		--btca-brand: #255099;
-		--btca-brand-light: #8ca7e6;
-		--btca-brand-dark: #1b3f7a;
+		--btca-brand: #4783eb;
+		--btca-brand-light: #9abbf4;
+		--btca-brand-dark: #1450b8;
 
 		--btca-n0: #fafafa;
 		--btca-n50: #f0f0f0;
@@ -91,9 +91,9 @@
 	:root.dark {
 		color-scheme: dark;
 
-		--btca-brand: #255099;
-		--btca-brand-light: #8ca7e6;
-		--btca-brand-dark: #1b3f7a;
+		--btca-brand: #4783eb;
+		--btca-brand-light: #9abbf4;
+		--btca-brand-dark: #1450b8;
 
 		--btca-n0: #161616;
 		--btca-n50: #2a2a2a;

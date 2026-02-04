@@ -53,9 +53,9 @@ be a portable reference for the main BTCA product and any related surfaces
 
 ### Core brand colors
 
-- **Brand / Primary**: `#255099`
-- **Brand Light**: `#8CA7E6`
-- **Brand Dark**: `#1B3F7A`
+- **Brand / Primary**: `#4783EB`
+- **Brand Light**: `#9ABBF4`
+- **Brand Dark**: `#1450B8`
 
 ### Neutral scale
 
@@ -252,9 +252,9 @@ Use 4px grid.
 ## CSS token map (suggested)
 
 ```
---btca-brand: #255099;
---btca-brand-light: #8CA7E6;
---btca-brand-dark: #1B3F7A;
+--btca-brand: #4783EB;
+--btca-brand-light: #9ABBF4;
+--btca-brand-dark: #1450B8;
 
 --btca-n0: #FFFFFF;
 --btca-n50: #F7F8FA;

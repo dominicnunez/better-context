@@ -3,20 +3,20 @@
 	"theme": "linden",
 	"name": "btca",
 	"colors": {
-		"primary": "#255099",
-		"light": "#8CA7E6",
-		"dark": "#1B3F7A"
+		"primary": "#4783EB",
+		"light": "#9ABBF4",
+		"dark": "#1450B8"
 	},
 	"fonts": {
 		"heading": {
 			"family": "Geist",
-			"source": "/fonts/Geist-Variable.woff2",
+			"source": "/fonts/Geist[wght].woff2",
 			"format": "woff2",
 			"weight": 600
 		},
 		"body": {
 			"family": "Geist",
-			"source": "/fonts/Geist-Variable.woff2",
+			"source": "/fonts/Geist[wght].woff2",
 			"format": "woff2",
 			"weight": 400
 		}

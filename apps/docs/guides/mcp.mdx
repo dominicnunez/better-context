@@ -1,6 +1,6 @@
 ---
-title: "MCP Server"
-description: "Connect the btca MCP server to your agents"
+title: 'MCP Server'
+description: 'Connect the btca MCP server to your agents'
 ---
 
 [Get your MCP API key](https://btca.dev/app/settings?tab=mcp)
@@ -50,14 +50,14 @@ In `.cursor/mcp.json`:
 
 ```json
 {
-  "mcpServers": {
-    "server-name": {
-      "url": "https://btca.dev/api/mcp",
-      "headers": {
-        "Authorization": "Bearer ak..."
-      }
-    }
-  }
+	"mcpServers": {
+		"server-name": {
+			"url": "https://btca.dev/api/mcp",
+			"headers": {
+				"Authorization": "Bearer ak..."
+			}
+		}
+	}
 }
 ```
 
@@ -93,17 +93,17 @@ In `opencode.json`:
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "better-context": {
-      "type": "remote",
-      "url": "https://btca.dev/api/mcp",
-      "enabled": true,
-      "headers": {
-        "Authorization": "Bearer ak..."
-      }
-    }
-  }
+	"$schema": "https://opencode.ai/config.json",
+	"mcp": {
+		"better-context": {
+			"type": "remote",
+			"url": "https://btca.dev/api/mcp",
+			"enabled": true,
+			"headers": {
+				"Authorization": "Bearer ak..."
+			}
+		}
+	}
 }
 ```
 

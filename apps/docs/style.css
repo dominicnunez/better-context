@@ -1,6 +1,6 @@
 @font-face {
-	font-family: 'Geist Mono';
-	src: url('/fonts/GeistMono-Variable.woff2') format('woff2');
+	font-family: 'GeistMono';
+	src: url('/fonts/GeistMono[wght].woff2') format('woff2');
 	font-weight: 100 900;
 	font-style: normal;
 	font-display: swap;
@@ -13,6 +13,6 @@ samp,
 .code-block,
 .code-group {
 	font-family:
-		'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+		'GeistMono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
 		'Courier New', monospace;
 }

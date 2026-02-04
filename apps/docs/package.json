@@ -2,7 +2,9 @@
 	"name": "@btca/docs",
 	"private": true,
 	"scripts": {
-		"dev": "mint dev"
+		"dev": "mint dev",
+		"format": "prettier --write .",
+		"check": "mint validate"
 	},
 	"dependencies": {},
 	"devDependencies": {
