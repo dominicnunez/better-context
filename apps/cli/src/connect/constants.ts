@@ -1,5 +1,5 @@
 export const CURATED_MODELS: Record<string, { id: string; label: string }[]> = {
-	openai: [{ id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' }],
+	openai: [{ id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' }],
 	'github-copilot': [
 		{ id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
 		{ id: 'grok-code-fast-1', label: 'Grok Code Fast 1' }
