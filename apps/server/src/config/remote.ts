@@ -308,12 +308,8 @@ export namespace RemoteConfigService {
 			return Result.ok(undefined);
 		});
 
-		result.match({
-			ok: () => Metrics.info('remote.auth.saved', { path: authPath }),
-			err: (error) => {
-				throw error;
-			}
-		});
+		if (!Result.isOk(result)) throw result.error;
+		Metrics.info('remote.auth.saved', { path: authPath });
 	}
 
 	/**
@@ -394,16 +390,11 @@ export namespace RemoteConfigService {
 				})
 		});
 
-		result.match({
-			ok: () =>
-				Metrics.info('remote.config.saved', {
-					path: configPath,
-					project: config.project,
-					resourceCount: config.resources.length
-				}),
-			err: (error) => {
-				throw error;
-			}
+		if (!Result.isOk(result)) throw result.error;
+		Metrics.info('remote.config.saved', {
+			path: configPath,
+			project: config.project,
+			resourceCount: config.resources.length
 		});
 	}
 

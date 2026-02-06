@@ -20,11 +20,42 @@ const toSse = (event: BtcaStreamEvent): string => {
 	return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
 };
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number) => {
+	const timeout = (async () => {
+		await sleep(timeoutMs);
+		throw new Error('timeout');
+	})();
+	return Promise.race([promise, timeout]);
+};
+
+const hasAnyDefined = (record: Record<string, unknown> | undefined) =>
+	Boolean(record && Object.values(record).some((v) => v != null));
+
+const costFor = (tokens: number | undefined, usdPerMTokens: number | undefined) =>
+	tokens == null || usdPerMTokens == null ? undefined : (tokens / 1_000_000) * usdPerMTokens;
+
 export namespace StreamService {
 	export const createSseStream = (args: {
 		meta: BtcaStreamMetaEvent;
 		eventStream: AsyncIterable<AgentLoop.AgentEvent>;
 		question?: string; // Original question - used to filter echoed user message
+		requestStartMs?: number;
+		pricing?: {
+			lookup: (args: { providerId: string; modelId: string; timeoutMs?: number }) => Promise<{
+				source: 'models.dev';
+				modelKey: string;
+				ratesUsdPerMTokens: {
+					input?: number;
+					output?: number;
+					reasoning?: number;
+					cacheRead?: number;
+					cacheWrite?: number;
+				};
+			} | null>;
+		};
+		pricingTimeoutMs?: number;
 	}): ReadableStream<Uint8Array> => {
 		const encoder = new TextEncoder();
 
@@ -52,11 +83,15 @@ export namespace StreamService {
 		let toolEvents = 0;
 		let reasoningEvents = 0;
 
+		const requestStartMs = args.requestStartMs ?? performance.now();
+		let streamStartMs = requestStartMs;
+
 		// Extract the core question for stripping echoed user message from final response
 		const coreQuestion = extractCoreQuestion(args.question);
 
 		return new ReadableStream<Uint8Array>({
 			start(controller) {
+				streamStartMs = performance.now();
 				Metrics.info('stream.start', {
 					collectionKey: args.meta.collection.key,
 					resources: args.meta.resources,
@@ -148,11 +183,87 @@ export namespace StreamService {
 								}
 
 								case 'finish': {
+									const finishedAtMs = performance.now();
 									const tools = Array.from(toolsByCallId.values());
 
 									// Strip the echoed user question from the final text
 									const finalText = stripUserQuestionFromStart(accumulatedText, coreQuestion);
 									emittedText = finalText;
+
+									const usage = hasAnyDefined(event.usage as Record<string, unknown> | undefined)
+										? {
+												inputTokens: event.usage?.inputTokens,
+												outputTokens: event.usage?.outputTokens,
+												reasoningTokens: event.usage?.reasoningTokens,
+												totalTokens: event.usage?.totalTokens
+											}
+										: undefined;
+
+									const totalMs = Math.max(0, finishedAtMs - requestStartMs);
+									const genMs = Math.max(0, finishedAtMs - streamStartMs);
+
+									const throughput =
+										genMs > 0 && usage
+											? {
+													outputTokensPerSecond:
+														usage.outputTokens == null
+															? undefined
+															: usage.outputTokens / (genMs / 1000),
+													totalTokensPerSecond:
+														usage.totalTokens == null
+															? undefined
+															: usage.totalTokens / (genMs / 1000)
+												}
+											: undefined;
+
+									const pricingTimeoutMs = args.pricingTimeoutMs ?? 250;
+									const pricingLookup = args.pricing
+										? withTimeout(
+												args.pricing.lookup({
+													providerId: args.meta.model.provider,
+													modelId: args.meta.model.model,
+													timeoutMs: pricingTimeoutMs
+												}),
+												pricingTimeoutMs
+											).catch(() => null)
+										: Promise.resolve(null);
+
+									const pricingResult = await pricingLookup;
+
+									const pricing =
+										pricingResult && usage
+											? (() => {
+													const rates = pricingResult.ratesUsdPerMTokens;
+													const input = costFor(usage.inputTokens, rates.input);
+													const output = costFor(usage.outputTokens, rates.output);
+													const reasoning = costFor(usage.reasoningTokens, rates.reasoning);
+													const hasAnyCostPart =
+														input != null || output != null || reasoning != null;
+													const total = (input ?? 0) + (output ?? 0) + (reasoning ?? 0);
+
+													return {
+														source: 'models.dev' as const,
+														modelKey: pricingResult.modelKey,
+														ratesUsdPerMTokens: rates,
+														...(hasAnyCostPart
+															? {
+																	costUsd: {
+																		...(input == null ? {} : { input }),
+																		...(output == null ? {} : { output }),
+																		...(reasoning == null ? {} : { reasoning }),
+																		total
+																	}
+																}
+															: {})
+													};
+												})()
+											: pricingResult
+												? {
+														source: 'models.dev' as const,
+														modelKey: pricingResult.modelKey,
+														ratesUsdPerMTokens: pricingResult.ratesUsdPerMTokens
+													}
+												: undefined;
 
 									Metrics.info('stream.done', {
 										collectionKey: args.meta.collection.key,
@@ -162,14 +273,24 @@ export namespace StreamService {
 										textEvents,
 										toolEvents,
 										reasoningEvents,
-										finishReason: event.finishReason
+										finishReason: event.finishReason,
+										totalMs,
+										genMs,
+										usage,
+										pricingModelKey: pricingResult?.modelKey ?? null
 									});
 
 									const done: BtcaStreamDoneEvent = {
 										type: 'done',
 										text: finalText,
 										reasoning: accumulatedReasoning,
-										tools
+										tools,
+										...(usage ? { usage } : {}),
+										metrics: {
+											timing: { totalMs, genMs },
+											...(throughput ? { throughput } : {}),
+											...(pricing ? { pricing } : {})
+										}
 									};
 									emit(controller, done);
 									break;

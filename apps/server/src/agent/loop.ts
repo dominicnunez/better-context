@@ -18,7 +18,12 @@ export namespace AgentLoop {
 		| {
 				type: 'finish';
 				finishReason: string;
-				usage?: { inputTokens?: number; outputTokens?: number };
+				usage?: {
+					inputTokens?: number;
+					outputTokens?: number;
+					reasoningTokens?: number;
+					totalTokens?: number;
+				};
 		  }
 		| { type: 'error'; error: Error };
 
@@ -213,7 +218,11 @@ export namespace AgentLoop {
 						finishReason: part.finishReason ?? 'unknown',
 						usage: {
 							inputTokens: part.totalUsage?.inputTokens,
-							outputTokens: part.totalUsage?.outputTokens
+							outputTokens: part.totalUsage?.outputTokens,
+							reasoningTokens:
+								part.totalUsage?.outputTokenDetails?.reasoningTokens ??
+								part.totalUsage?.reasoningTokens,
+							totalTokens: part.totalUsage?.totalTokens
 						}
 					});
 					break;
@@ -322,7 +331,11 @@ export namespace AgentLoop {
 						finishReason: part.finishReason ?? 'unknown',
 						usage: {
 							inputTokens: part.totalUsage?.inputTokens,
-							outputTokens: part.totalUsage?.outputTokens
+							outputTokens: part.totalUsage?.outputTokens,
+							reasoningTokens:
+								part.totalUsage?.outputTokenDetails?.reasoningTokens ??
+								part.totalUsage?.reasoningTokens,
+							totalTokens: part.totalUsage?.totalTokens
 						}
 					};
 					break;

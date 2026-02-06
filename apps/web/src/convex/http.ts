@@ -90,6 +90,28 @@ type BtcaStreamDoneEvent = {
 	text: string;
 	reasoning: string;
 	tools: Array<{ callID: string; tool: string; state?: BtcaToolState }>;
+	usage?: {
+		inputTokens?: number;
+		outputTokens?: number;
+		reasoningTokens?: number;
+		totalTokens?: number;
+	};
+	metrics?: {
+		timing?: { totalMs?: number; genMs?: number };
+		throughput?: { outputTokensPerSecond?: number; totalTokensPerSecond?: number };
+		pricing?: {
+			source: 'models.dev';
+			modelKey?: string;
+			ratesUsdPerMTokens?: {
+				input?: number;
+				output?: number;
+				reasoning?: number;
+				cacheRead?: number;
+				cacheWrite?: number;
+			};
+			costUsd?: { input?: number; output?: number; reasoning?: number; total?: number };
+		};
+	};
 };
 
 type BtcaStreamErrorEvent = {

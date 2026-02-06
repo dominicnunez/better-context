@@ -303,12 +303,7 @@ const gitClone = async (args: {
 		return Result.ok(undefined);
 	});
 
-	result.match({
-		ok: () => undefined,
-		err: (error) => {
-			throw error;
-		}
-	});
+	if (!Result.isOk(result)) throw result.error;
 };
 
 const gitUpdate = async (args: {
@@ -390,12 +385,7 @@ const gitUpdate = async (args: {
 		return Result.ok(undefined);
 	});
 
-	result.match({
-		ok: () => undefined,
-		err: (error) => {
-			throw error;
-		}
-	});
+	if (!Result.isOk(result)) throw result.error;
 };
 
 /**
@@ -484,12 +474,7 @@ const ensureGitResource = async (config: BtcaGitResourceArgs): Promise<string> =
 						cause
 					})
 			});
-			mkdirResult.match({
-				ok: () => undefined,
-				err: (error) => {
-					throw error;
-				}
-			});
+			if (!Result.isOk(mkdirResult)) throw mkdirResult.error;
 
 			await gitClone({
 				repoUrl: config.url,

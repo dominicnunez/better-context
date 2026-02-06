@@ -79,7 +79,10 @@ export const services = {
 		resourceNames: string[],
 		question: string,
 		onChunkUpdate: (update: ChunkUpdate) => void
-	): Promise<BtcaChunk[]> => {
+	): Promise<{
+		chunks: BtcaChunk[];
+		doneEvent?: Extract<BtcaStreamEvent, { type: 'done' }>;
+	}> => {
 		const serverUrl = getServerUrl();
 
 		// Create abort controller for this request
@@ -96,10 +99,15 @@ export const services = {
 		// Track chunks by ID for updates, and order separately for display
 		const chunksById = new Map<string, BtcaChunk>();
 		const chunkOrder: string[] = [];
+		let doneEvent: Extract<BtcaStreamEvent, { type: 'done' }> | undefined;
 
 		const streamResult = await Result.tryPromise(async () => {
 			for await (const event of parseSSEStream(response)) {
 				if (signal.aborted) break;
+				if (event.type === 'done') {
+					doneEvent = event;
+					continue;
+				}
 				processStreamEvent(event, chunksById, chunkOrder, onChunkUpdate);
 			}
 		});
@@ -111,7 +119,10 @@ export const services = {
 		}
 
 		currentAbortController = null;
-		return chunkOrder.map((id) => chunksById.get(id)!);
+		return {
+			chunks: chunkOrder.map((id) => chunksById.get(id)!),
+			...(doneEvent ? { doneEvent } : {})
+		};
 	},
 
 	/**

@@ -710,9 +710,35 @@ Event types:
 				"output": "..."
 			}
 		}
-	]
+	],
+	"usage": {
+		"inputTokens": 1234,
+		"outputTokens": 456,
+		"reasoningTokens": 120,
+		"totalTokens": 1690
+	},
+	"metrics": {
+		"timing": { "totalMs": 5321, "genMs": 2710 },
+		"throughput": {
+			"outputTokensPerSecond": 168.3,
+			"totalTokensPerSecond": 623.6
+		},
+		"pricing": {
+			"source": "models.dev",
+			"modelKey": "openai/gpt-4o-mini",
+			"ratesUsdPerMTokens": { "input": 0.14, "output": 0.54 },
+			"costUsd": { "input": 0.000173, "output": 0.000246, "total": 0.000419 }
+		}
+	}
 }
 ```
+
+Notes:
+
+- `usage` and `metrics` are optional and may be omitted if unavailable.
+- Pricing is best-effort: it may be omitted if the model cannot be mapped or the lookup times out.
+- Pricing rates are USD per 1M tokens from `https://models.dev/api.json`.
+- `reasoningTokens` availability depends on provider/model.
 
 **error** example:
 

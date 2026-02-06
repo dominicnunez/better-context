@@ -10,6 +10,7 @@ import { Config } from './config/index.ts';
 import { Context } from './context/index.ts';
 import { getErrorMessage, getErrorTag, getErrorHint } from './errors.ts';
 import { Metrics } from './metrics/index.ts';
+import { ModelsDevPricing } from './pricing/models-dev.ts';
 import { Resources } from './resources/service.ts';
 import { GitResourceSchema, LocalResourceSchema } from './resources/schema.ts';
 import { StreamService } from './stream/service.ts';
@@ -36,6 +37,8 @@ import { VirtualFs } from './vfs/virtual-fs.ts';
 
 const DEFAULT_PORT = 8080;
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_PORT;
+
+const modelsDevPricing = ModelsDevPricing.create();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request Schemas
@@ -327,6 +330,7 @@ const createApp = (deps: {
 
 		// POST /question/stream
 		.post('/question/stream', async (c: HonoContext) => {
+			const requestStartMs = performance.now();
 			const decoded = await decodeJson(c.req.raw, QuestionRequestSchema);
 			const resourceNames =
 				decoded.resources && decoded.resources.length > 0
@@ -361,10 +365,13 @@ const createApp = (deps: {
 			} satisfies BtcaStreamMetaEvent;
 
 			Metrics.info('question.stream.start', { collectionKey });
+			modelsDevPricing.prefetch();
 			const stream = StreamService.createSseStream({
 				meta,
 				eventStream,
-				question: decoded.question
+				question: decoded.question,
+				requestStartMs,
+				pricing: modelsDevPricing
 			});
 
 			return new Response(stream, {
