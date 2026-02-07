@@ -239,13 +239,11 @@ export namespace Collections {
 						});
 					});
 
-					return result.match({
-						ok: (value) => value,
-						err: (error) => {
-							cleanupVirtual();
-							throw error;
-						}
-					});
+					if (!Result.isOk(result)) {
+						cleanupVirtual();
+						throw result.error;
+					}
+					return result.value;
 				})
 		};
 	};

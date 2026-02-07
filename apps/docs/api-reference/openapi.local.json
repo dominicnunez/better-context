@@ -164,7 +164,7 @@
 				},
 				"responses": {
 					"200": {
-						"description": "Server-sent events stream. Event types: meta, reasoning.delta, text.delta, tool.updated, done, error.",
+						"description": "Server-sent events stream. Event types: meta, reasoning.delta, text.delta, tool.updated, done, error. The final done event may include optional usage and metrics fields.",
 						"content": {
 							"text/event-stream": {
 								"schema": {

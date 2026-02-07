@@ -119,7 +119,54 @@ export const BtcaStreamEventSchema = z.discriminatedUnion('type', [
 				tool: z.string(),
 				state: BtcaToolStateSchema
 			})
-		)
+		),
+		usage: z
+			.object({
+				inputTokens: z.number().optional(),
+				outputTokens: z.number().optional(),
+				reasoningTokens: z.number().optional(),
+				totalTokens: z.number().optional()
+			})
+			.optional(),
+		metrics: z
+			.object({
+				timing: z
+					.object({
+						totalMs: z.number().optional(),
+						genMs: z.number().optional()
+					})
+					.optional(),
+				throughput: z
+					.object({
+						outputTokensPerSecond: z.number().optional(),
+						totalTokensPerSecond: z.number().optional()
+					})
+					.optional(),
+				pricing: z
+					.object({
+						source: z.literal('models.dev'),
+						modelKey: z.string().optional(),
+						ratesUsdPerMTokens: z
+							.object({
+								input: z.number().optional(),
+								output: z.number().optional(),
+								reasoning: z.number().optional(),
+								cacheRead: z.number().optional(),
+								cacheWrite: z.number().optional()
+							})
+							.optional(),
+						costUsd: z
+							.object({
+								input: z.number().optional(),
+								output: z.number().optional(),
+								reasoning: z.number().optional(),
+								total: z.number().optional()
+							})
+							.optional()
+					})
+					.optional()
+			})
+			.optional()
 	}),
 	z.object({
 		type: z.literal('error'),

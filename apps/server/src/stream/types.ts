@@ -66,6 +66,51 @@ export const BtcaStreamToolUpdatedEventSchema = z.object({
 	state: BtcaToolStateSchema
 });
 
+export const BtcaStreamUsageSchema = z.object({
+	inputTokens: z.number().optional(),
+	outputTokens: z.number().optional(),
+	reasoningTokens: z.number().optional(),
+	totalTokens: z.number().optional()
+});
+
+export const BtcaStreamMetricsTimingSchema = z.object({
+	totalMs: z.number().optional(),
+	genMs: z.number().optional()
+});
+
+export const BtcaStreamMetricsThroughputSchema = z.object({
+	outputTokensPerSecond: z.number().optional(),
+	totalTokensPerSecond: z.number().optional()
+});
+
+export const BtcaStreamPricingRatesSchema = z.object({
+	input: z.number().optional(),
+	output: z.number().optional(),
+	reasoning: z.number().optional(),
+	cacheRead: z.number().optional(),
+	cacheWrite: z.number().optional()
+});
+
+export const BtcaStreamPricingCostSchema = z.object({
+	input: z.number().optional(),
+	output: z.number().optional(),
+	reasoning: z.number().optional(),
+	total: z.number().optional()
+});
+
+export const BtcaStreamMetricsPricingSchema = z.object({
+	source: z.literal('models.dev'),
+	modelKey: z.string().optional(),
+	ratesUsdPerMTokens: BtcaStreamPricingRatesSchema.optional(),
+	costUsd: BtcaStreamPricingCostSchema.optional()
+});
+
+export const BtcaStreamMetricsSchema = z.object({
+	timing: BtcaStreamMetricsTimingSchema.optional(),
+	throughput: BtcaStreamMetricsThroughputSchema.optional(),
+	pricing: BtcaStreamMetricsPricingSchema.optional()
+});
+
 export const BtcaStreamDoneEventSchema = z.object({
 	type: z.literal('done'),
 	text: z.string(),
@@ -76,7 +121,9 @@ export const BtcaStreamDoneEventSchema = z.object({
 			tool: z.string(),
 			state: BtcaToolStateSchema
 		})
-	)
+	),
+	usage: BtcaStreamUsageSchema.optional(),
+	metrics: BtcaStreamMetricsSchema.optional()
 });
 
 export const BtcaStreamErrorEventSchema = z.object({

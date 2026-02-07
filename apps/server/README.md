@@ -108,7 +108,7 @@ Ask a question (non-streaming response).
 POST /question/stream
 ```
 
-Ask a question with streaming SSE response.
+Ask a question with streaming SSE response. The final `done` SSE event may include optional usage/metrics (tokens, timing, throughput, and best-effort pricing).
 
 ### Model Configuration
 

@@ -443,15 +443,17 @@ describe('Config', () => {
 			const config = await Config.load();
 
 			// Update the model
-			await config.updateModel('new-provider', 'new-model');
+			const nextProvider = 'openrouter';
+			const nextModel = 'openai/gpt-4o-mini';
+			await config.updateModel(nextProvider, nextModel);
 
-			expect(config.provider).toBe('new-provider');
-			expect(config.model).toBe('new-model');
+			expect(config.provider).toBe(nextProvider);
+			expect(config.model).toBe(nextModel);
 
 			// CRITICAL: Verify project config was updated
 			const savedProjectConfig = JSON.parse(await fs.readFile(projectConfigPath, 'utf-8'));
-			expect(savedProjectConfig.provider).toBe('new-provider');
-			expect(savedProjectConfig.model).toBe('new-model');
+			expect(savedProjectConfig.provider).toBe(nextProvider);
+			expect(savedProjectConfig.model).toBe(nextModel);
 			// Global resources should NOT have leaked into project config
 			expect(savedProjectConfig.resources.length).toBe(0);
 

@@ -15,6 +15,82 @@ import { copyToClipboard } from '../clipboard.ts';
 import { formatError } from '../lib/format-error.ts';
 import { createThread, loadThread, saveThread, type LocalThreadMessage } from '../thread-store.ts';
 
+const formatUsd = (value: number) => {
+	const abs = Math.abs(value);
+	const decimals = abs >= 1 ? 2 : abs >= 0.01 ? 4 : 6;
+	const fixed = value.toFixed(decimals);
+	return `$${fixed.replace(/\.?0+$/, '')}`;
+};
+
+const formatStreamStats = (done: {
+	usage?: {
+		inputTokens?: number;
+		outputTokens?: number;
+		reasoningTokens?: number;
+		totalTokens?: number;
+	};
+	metrics?: {
+		timing?: { totalMs?: number; genMs?: number };
+		throughput?: { outputTokensPerSecond?: number; totalTokensPerSecond?: number };
+		pricing?: {
+			source: 'models.dev';
+			modelKey?: string;
+			ratesUsdPerMTokens?: { input?: number; output?: number; reasoning?: number };
+			costUsd?: { input?: number; output?: number; reasoning?: number; total?: number };
+		};
+	};
+}) => {
+	const parts: string[] = [];
+
+	const pricing = done.metrics?.pricing;
+	const costUsd =
+		pricing?.costUsd?.total ??
+		(() => {
+			const pieces = pricing?.costUsd;
+			if (!pieces) return undefined;
+			const input = pieces.input ?? 0;
+			const output = pieces.output ?? 0;
+			const reasoning = pieces.reasoning ?? 0;
+			const hasAny = pieces.input != null || pieces.output != null || pieces.reasoning != null;
+			return hasAny ? input + output + reasoning : undefined;
+		})();
+
+	const inTok = done.usage?.inputTokens;
+	const outTok = done.usage?.outputTokens;
+	const rTok = done.usage?.reasoningTokens;
+	const totalTok = done.usage?.totalTokens;
+	if (inTok != null || outTok != null || rTok != null || totalTok != null) {
+		parts.push(
+			[
+				`tokens in ${inTok?.toLocaleString() ?? '?'}`,
+				`out ${outTok?.toLocaleString() ?? '?'}`,
+				`reasoning ${rTok?.toLocaleString() ?? '?'}`,
+				`tokens total ${totalTok?.toLocaleString() ?? '?'}`,
+				costUsd == null ? undefined : `cost ${formatUsd(costUsd)}`
+			]
+				.filter(Boolean)
+				.join(' | ')
+		);
+	} else if (costUsd != null) {
+		parts.push(`cost ${formatUsd(costUsd)}`);
+	}
+
+	const genMs = done.metrics?.timing?.genMs;
+	const totalMs = done.metrics?.timing?.totalMs;
+	if (genMs != null || totalMs != null) {
+		const genS = genMs == null ? '?' : (genMs / 1000).toFixed(2);
+		const totalS = totalMs == null ? '?' : (totalMs / 1000).toFixed(2);
+		parts.push(`time gen ${genS}s | time total ${totalS}s`);
+	}
+
+	const outTps = done.metrics?.throughput?.outputTokensPerSecond;
+	if (outTps != null) {
+		parts.push(`tps ${outTps.toFixed(1)}`);
+	}
+
+	return parts.length > 0 ? `Generation stats: ${parts.join(' || ')}` : null;
+};
+
 type MessagesState = {
 	// Message history
 	messages: Accessor<Message[]>;
@@ -264,14 +340,20 @@ export const MessagesProvider: Component<ParentProps> = (props) => {
 		const questionWithHistory = formatConversationHistory(threadMessages, question);
 
 		const result = await Result.tryPromise(async () => {
-			const finalChunks = await services.askQuestion(
+			const result = await services.askQuestion(
 				updatedResources,
 				questionWithHistory,
 				handleChunkUpdate
 			);
+			const finalChunks = result.chunks;
 
 			// Check if canceled during streaming
 			if (cancelState() === 'pending') return;
+
+			if (result.doneEvent) {
+				const stats = formatStreamStats(result.doneEvent);
+				if (stats) addMessage({ role: 'system', content: stats });
+			}
 
 			const textChunks = finalChunks.filter((c) => c.type === 'text');
 			const fullResponse = textChunks.map((c) => c.text).join('\n\n');
