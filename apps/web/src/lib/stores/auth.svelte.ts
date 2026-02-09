@@ -1,5 +1,5 @@
 import type { Clerk } from '@clerk/clerk-js';
-import type { UserResource } from '@clerk/types';
+import type { SessionResource, UserResource } from '@clerk/types';
 import type { Id } from '../../convex/_generated/dataModel';
 
 // Auth state
@@ -7,6 +7,7 @@ let clerk = $state<Clerk | null>(null);
 let isLoaded = $state(false);
 let isSignedIn = $state(false);
 let user = $state<UserResource | null>(null);
+let session = $state<SessionResource | null>(null);
 let instanceId = $state<Id<'instances'> | null>(null);
 
 /**
@@ -17,11 +18,14 @@ export function setClerk(instance: Clerk) {
 	isLoaded = instance.loaded ?? false;
 	isSignedIn = !!instance.user;
 	user = instance.user ?? null;
+	session = instance.session ?? null;
 
 	// Listen for auth changes
-	instance.addListener((resources) => {
-		isSignedIn = !!resources.user;
-		user = resources.user ?? null;
+	instance.addListener(() => {
+		isLoaded = instance.loaded ?? false;
+		isSignedIn = !!instance.user;
+		user = instance.user ?? null;
+		session = instance.session ?? null;
 	});
 }
 
@@ -52,6 +56,12 @@ export function getAuthState() {
 		get user() {
 			return user;
 		},
+		get session() {
+			return session;
+		},
+		get hasSession() {
+			return !!session;
+		},
 		get instanceId() {
 			return instanceId;
 		},
@@ -67,6 +77,8 @@ export function getAuthState() {
 		readonly isLoaded: boolean;
 		readonly isSignedIn: boolean;
 		readonly user: UserResource | null;
+		readonly session: SessionResource | null;
+		readonly hasSession: boolean;
 		instanceId: Id<'instances'> | null;
 		getToken: (options?: { template?: string }) => Promise<string | null>;
 	};
@@ -78,6 +90,7 @@ export function getAuthState() {
 export async function signOut() {
 	if (clerk) {
 		await clerk.signOut();
+		session = null;
 		instanceId = null;
 	}
 }

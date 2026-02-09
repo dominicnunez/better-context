@@ -108,10 +108,12 @@
 
 	$effect(() => {
 		const isSignedIn = auth.isSignedIn;
+		const hasSession = auth.hasSession;
 		const needsBootstrap = instanceStore.needsBootstrap;
-		const isBootstrapping = instanceStore.isBootstrapping;
 
-		if (isSignedIn && needsBootstrap && !isBootstrapping) {
+		// Avoid hammering Convex: only attempt when Clerk session exists, and don't re-trigger
+		// just because `isBootstrapping` toggles.
+		if (isSignedIn && hasSession && needsBootstrap) {
 			untrack(() => {
 				void instanceStore.ensureExists();
 			});
