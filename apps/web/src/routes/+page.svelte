@@ -93,6 +93,7 @@
 				<a href="/resources" class="bc-chip">Resources</a>
 				<a href="https://docs.btca.dev" class="bc-chip" target="_blank" rel="noreferrer"> Docs </a>
 				<a href="/web" class="bc-chip">Web app</a>
+				<a href="/cli" class="bc-chip">CLI</a>
 				<a
 					href="https://docs.btca.dev/guides/configuration"
 					class="bc-chip"
