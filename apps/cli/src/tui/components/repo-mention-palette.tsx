@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { TextareaRenderable } from '@opentui/core';
 import { useKeyboard } from '@opentui/react';
 
@@ -23,10 +23,7 @@ export const RepoMentionPalette = (props: RepoMentionPaletteProps) => {
 		item.type === 'pasted' ? `[~${item.lines} lines]`.length : item.content.length;
 
 	const curInputIdx = () => {
-		const inputRef = props.inputRef;
-		if (!inputRef) return 0;
-		const cursor = inputRef.logicalCursor;
-		const currentInputIndex = cursor.col;
+		const currentInputIndex = props.cursorPosition;
 		let curIdx = 0;
 		let totalLength = 0;
 		while (curIdx < props.inputState.length) {
@@ -47,7 +44,15 @@ export const RepoMentionPalette = (props: RepoMentionPaletteProps) => {
 		if (!curInput) return repos;
 		const trimmedInput = curInput.toLowerCase().trim().slice(1);
 		return repos.filter((repo) => repo.name.toLowerCase().includes(trimmedInput));
-	}, [config.repos, props.inputState, props.cursorPosition, props.inputRef]);
+	}, [config.repos, props.inputState, props.cursorPosition]);
+
+	useEffect(() => {
+		setSelectedIndex((prev) => {
+			if (filteredRepos.length === 0) return 0;
+			if (prev >= filteredRepos.length) return filteredRepos.length - 1;
+			return prev < 0 ? 0 : prev;
+		});
+	}, [filteredRepos.length]);
 
 	const visibleRange = useMemo(() => {
 		const start = Math.max(

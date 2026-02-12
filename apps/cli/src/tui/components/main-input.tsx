@@ -45,7 +45,7 @@ export const MainInput = (props: MainInputProps) => {
 		const ref = textareaRef.current;
 		if (!ref) return;
 		const cursor = ref.logicalCursor;
-		props.setCursorPosition(cursor.col);
+		props.setCursorPosition(cursor.row * getAvailableWidth() + cursor.col);
 	};
 
 	const getPlaceholder = () => {
@@ -252,7 +252,7 @@ export const MainInput = (props: MainInputProps) => {
 			const ref = textareaRef.current;
 			if (!ref) return;
 			const cursor = ref.logicalCursor;
-			props.setCursorPosition(cursor.col);
+			props.setCursorPosition(cursor.row * getAvailableWidth() + cursor.col);
 		});
 	}
 
@@ -285,9 +285,10 @@ export const MainInput = (props: MainInputProps) => {
 					const row = e.y;
 					const col = e.x - 1;
 					const pos = row * availableWidth + col;
-					ref.editBuffer.setCursor(0, Math.min(pos, getValue().length));
+					const clampedPos = Math.min(pos, getValue().length);
+					ref.editBuffer.setCursor(0, clampedPos);
 					queueMicrotask(() => {
-						props.setCursorPosition(pos);
+						props.setCursorPosition(clampedPos);
 					});
 				}}
 			>
@@ -324,8 +325,8 @@ export const MainInput = (props: MainInputProps) => {
 					}
 				}}
 				onKeyDown={handleKeyDown}
-				onCursorChange={(e) => {
-					props.setCursorPosition(e.visualColumn);
+				onCursorChange={() => {
+					syncCursorFromRef();
 				}}
 				textColor="transparent"
 				backgroundColor="transparent"

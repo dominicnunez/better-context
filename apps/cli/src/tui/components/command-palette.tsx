@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { TextareaRenderable } from '@opentui/core';
 import { useKeyboard } from '@opentui/react';
 
@@ -27,6 +27,14 @@ export const CommandPalette = (props: CommandPaletteProps) => {
 		const isAliasMatch = cmd.alias?.toLowerCase().startsWith(trimmedInput);
 		return isAliasMatch ? `/${cmd.name} (${cmd.alias})` : `/${cmd.name}`;
 	};
+
+	useEffect(() => {
+		setSelectedIndex((prev) => {
+			if (filteredCommands.length === 0) return 0;
+			if (prev >= filteredCommands.length) return filteredCommands.length - 1;
+			return prev < 0 ? 0 : prev;
+		});
+	}, [filteredCommands.length]);
 
 	useKeyboard((key) => {
 		switch (key.name) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TextareaRenderable } from '@opentui/core';
-import { useKeyboard, useTerminalDimensions } from '@opentui/react';
+import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/react';
 
 import type { ActiveWizard, InputState, WizardStep } from '../types.ts';
 import { inputHistory } from '../history.ts';
@@ -18,6 +18,7 @@ export const InputSection = () => {
 	const messages = useMessagesContext();
 	const config = useConfigContext();
 	const terminalDimensions = useTerminalDimensions();
+	const renderer = useRenderer();
 
 	const [inputState, setInputState] = useState<InputState>([]);
 	const [cursorPosition, setCursorPosition] = useState(0);
@@ -222,6 +223,14 @@ export const InputSection = () => {
 			if (inputState.length > 0) {
 				setInputState([]);
 				inputHistory.reset();
+				setCursorPosition(0);
+				if (inputRef) {
+					inputRef.setText('');
+					inputRef.editBuffer.setCursor(0, 0);
+				}
+			} else {
+				globalThis.__BTCA_SERVER__?.stop();
+				renderer.destroy();
 			}
 		}
 

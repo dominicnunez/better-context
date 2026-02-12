@@ -46,13 +46,6 @@ const App = () => {
 			renderer.destroy();
 			return;
 		}
-
-		// Ctrl+C to quit (when no input to clear - handled in InputSection)
-		if (key.name === 'c' && key.ctrl) {
-			globalThis.__BTCA_SERVER__?.stop();
-			renderer.destroy();
-			return;
-		}
 	});
 
 	useEffect(() => {
