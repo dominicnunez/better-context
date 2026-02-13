@@ -164,7 +164,11 @@ const listResourceNames = (config: StoredConfig | null): string[] => {
 		.map((resource) => (resource as StoredResource).name as string);
 };
 
-const getConfigOrigin = (value: 'provider' | 'model', projectConfig: StoredConfig | null, globalConfig: StoredConfig | null): string => {
+const getConfigOrigin = (
+	value: 'provider' | 'model',
+	projectConfig: StoredConfig | null,
+	globalConfig: StoredConfig | null
+): string => {
 	const hasInProject = projectConfig && typeof projectConfig[value] === 'string';
 	if (hasInProject) return 'project';
 	const hasInGlobal = globalConfig && typeof globalConfig[value] === 'string';
@@ -174,10 +178,7 @@ const getConfigOrigin = (value: 'provider' | 'model', projectConfig: StoredConfi
 
 const compareVersions = (left: string, right: string): number => {
 	const toParts = (value: string) =>
-		value
-			.trim()
-			.replace(/^v/, '')
-			.split(/[-+]/, 1)[0]
+		(value.trim().replace(/^v/, '').split(/[-+]/, 1)[0] ?? '')
 			.split('.')
 			.map((part) => Number.parseInt(part, 10));
 
@@ -255,7 +256,10 @@ export const statusCommand = new Command('status')
 				console.log(`Selected provider authed: ${isAuthenticated ? 'yes' : 'no'}`);
 				console.log('');
 
-				printResourceList('Global resources', globalConfig ? listResourceNames(globalConfig) : null);
+				printResourceList(
+					'Global resources',
+					globalConfig ? listResourceNames(globalConfig) : null
+				);
 				printResourceList(
 					'Project resources',
 					projectConfig ? listResourceNames(projectConfig) : null

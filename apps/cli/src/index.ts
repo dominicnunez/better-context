@@ -10,7 +10,6 @@ import { statusCommand } from './commands/status.ts';
 import { mcpCommand } from './commands/mcp.ts';
 import { removeCommand } from './commands/remove.ts';
 import { resourcesCommand } from './commands/resources.ts';
-import { remoteCommand } from './commands/remote.ts';
 import { serveCommand } from './commands/serve.ts';
 import { skillCommand } from './commands/skill.ts';
 import { telemetryCommand } from './commands/telemetry.ts';
@@ -63,8 +62,6 @@ program.addCommand(wipeCommand);
 program.addCommand(mcpCommand);
 program.addCommand(serveCommand);
 
-// Remote mode commands
-program.addCommand(remoteCommand);
 program.addCommand(telemetryCommand);
 
 // Default action (no subcommand) → launch TUI or REPL

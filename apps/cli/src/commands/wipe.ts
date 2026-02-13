@@ -7,7 +7,7 @@ import * as readline from 'readline';
 import { bold, dim, red, yellow } from '../lib/utils/colors.ts';
 
 const home = path.resolve(os.homedir());
-const configFilenames = ['btca.config.jsonc', 'btca.remote.config.jsonc'];
+const configFilenames = ['btca.config.jsonc'];
 const globalConfigDir = path.join(home, '.config', 'btca');
 
 const createRl = () =>
