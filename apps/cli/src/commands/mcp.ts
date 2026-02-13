@@ -34,7 +34,9 @@ const askSchema = z.object({
 	resources: z
 		.array(z.string())
 		.optional()
-		.describe('Optional resource names to query (defaults to all local resources)')
+		.describe(
+			'Optional resource names or HTTPS GitHub repository URLs to query (defaults to all local resources)'
+		)
 });
 type AskInput = z.infer<typeof askSchema>;
 
@@ -353,7 +355,8 @@ const runLocalServer = async (command: Command) => {
 	mcpServer.tool(
 		{
 			name: 'ask',
-			description: 'Ask a question about local resources.',
+			description:
+				'Ask a question about local resources, or any HTTPS GitHub repository URL passed in as a resource.',
 			schema: askSchema
 		},
 		async (args: AskInput) => {
