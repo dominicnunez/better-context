@@ -194,6 +194,51 @@ function isNpmReference(input: string): boolean {
 	}
 }
 
+type SignalEvent = 'SIGINT' | 'SIGTERM' | 'exit';
+type ForwardedSignal = 'SIGINT' | 'SIGTERM';
+type SignalProcess = {
+	pid: number;
+	once: (event: SignalEvent, listener: () => void) => void;
+	off: (event: SignalEvent, listener: () => void) => void;
+	kill: (pid: number, signal: ForwardedSignal) => boolean;
+	exit: (code?: number) => void;
+};
+
+export function registerSignalCleanup(stopServer: () => void, proc: SignalProcess = process) {
+	let didCleanup = false;
+	const cleanup = () => {
+		if (didCleanup) return;
+		didCleanup = true;
+		try {
+			stopServer();
+		} catch {
+			// ignore cleanup errors
+		}
+	};
+	const forwardSignal = (signal: ForwardedSignal) => {
+		proc.off('SIGINT', onSigint);
+		proc.off('SIGTERM', onSigterm);
+		proc.off('exit', cleanup);
+		cleanup();
+		try {
+			proc.kill(proc.pid, signal);
+		} catch {
+			proc.exit(signal === 'SIGINT' ? 130 : 143);
+		}
+	};
+	const onSigint = () => forwardSignal('SIGINT');
+	const onSigterm = () => forwardSignal('SIGTERM');
+	proc.once('SIGINT', onSigint);
+	proc.once('SIGTERM', onSigterm);
+	proc.once('exit', cleanup);
+	return () => {
+		proc.off('SIGINT', onSigint);
+		proc.off('SIGTERM', onSigterm);
+		proc.off('exit', cleanup);
+		cleanup();
+	};
+}
+
 export const askCommand = new Command('ask')
 	.description('Ask a question about configured resources')
 	.requiredOption('-q, --question <text>', 'Question to ask')
@@ -224,6 +269,7 @@ export const askCommand = new Command('ask')
 				port: globalOpts?.port,
 				quiet: true
 			});
+			const teardownSignalCleanup = registerSignalCleanup(() => server.stop());
 
 			try {
 				const client = createClient(server.url);
@@ -262,20 +308,19 @@ export const askCommand = new Command('ask')
 				}
 
 				if (unresolvedExplicit.length > 0) {
-					console.error('Error: Unknown resources:');
-					for (const resourceName of unresolvedExplicit) {
-						console.error(`  - ${resourceName}`);
-					}
 					const available = resources.map((resource) => resource.name);
-					if (available.length > 0) {
-						console.error(`Available resources: ${available.join(', ')}`);
-					} else {
-						console.error('No resources are configured yet.');
-					}
-					console.error(
-						'Use a configured resource name, a valid HTTPS Git URL, or an npm reference (npm:<package> or npmjs URL).'
+					throw new BtcaError(
+						[
+							'Unknown resources:',
+							...unresolvedExplicit.map((resourceName) => `  - ${resourceName}`),
+							available.length > 0
+								? `Available resources: ${available.join(', ')}`
+								: 'No resources are configured yet.'
+						].join('\n'),
+						{
+							hint: 'Use a configured resource name, a valid HTTPS Git URL, or an npm reference (npm:<package> or npmjs URL).'
+						}
 					);
-					process.exit(1);
 				}
 
 				const normalized = {
@@ -295,9 +340,9 @@ export const askCommand = new Command('ask')
 						: resources.map((r) => r.name);
 
 				if (resourceNames.length === 0) {
-					console.error('Error: No resources configured.');
-					console.error('Add resources with "btca add" or check "btca resources".');
-					process.exit(1);
+					throw new BtcaError('No resources configured.', {
+						hint: 'Add resources with "btca add" or check "btca resources".'
+					});
 				}
 
 				const cleanedQuery = cleanQueryOfValidResources(questionText, mentionResolution.names);
@@ -371,7 +416,7 @@ export const askCommand = new Command('ask')
 
 				console.log('\n');
 			} finally {
-				server.stop();
+				teardownSignalCleanup();
 			}
 		});
 
