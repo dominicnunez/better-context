@@ -3,7 +3,7 @@ import { HttpTransport } from '@tmcp/transport-http';
 import { ZodJsonSchemaAdapter } from '@tmcp/adapter-zod';
 import { ConvexHttpClient } from 'convex/browser';
 import { z } from 'zod';
-import { env } from '$env/dynamic/public';
+import { PUBLIC_CONVEX_URL } from '$env/static/public';
 import { api } from '../../../convex/_generated/api';
 import type { RequestHandler } from './$types';
 import { extractApiKey, jsonError } from '../../../lib/result/http';
@@ -12,7 +12,7 @@ interface AuthContext extends Record<string, unknown> {
 	apiKey: string;
 }
 
-const getConvexClient = () => new ConvexHttpClient(env.PUBLIC_CONVEX_URL!);
+const getConvexClient = () => new ConvexHttpClient(PUBLIC_CONVEX_URL);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mcpServer = new McpServer<any, AuthContext>(

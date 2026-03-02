@@ -47,6 +47,10 @@ bun run server    # Start server in watch mode
 bun run cli       # Run CLI (no watch)
 ```
 
+### Web Deployment
+
+`apps/web` is configured for Vercel. Import the repo into Vercel, set the Root Directory to `apps/web`, and keep the checked-in [`apps/web/vercel.json`](/Users/davis/Developer/better-context/apps/web/vercel.json) so builds run through Convex and inject `PUBLIC_CONVEX_URL` automatically. You still need `CONVEX_DEPLOY_KEY` in Vercel, plus the app's public env vars in Vercel and the backend-only secrets in Convex.
+
 ### Scripts
 
 All scripts use Turborepo for caching. Run from the repository root.

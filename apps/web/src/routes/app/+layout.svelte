@@ -2,8 +2,8 @@
 	import { Loader2, Menu } from '@lucide/svelte';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
+	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 	import { setupConvex, useConvexClient, useQuery } from 'convex-svelte';
-	import { env } from '$env/dynamic/public';
 	import { initializeClerk, getClerk } from '$lib/clerk';
 	import { setAuthState, getAuthState, setInstanceId } from '$lib/stores/auth.svelte';
 	import { setBillingStore } from '$lib/stores/billing.svelte';
@@ -24,7 +24,7 @@
 
 	let { children } = $props();
 
-	setupConvex(env.PUBLIC_CONVEX_URL!);
+	setupConvex(PUBLIC_CONVEX_URL);
 
 	const client = useConvexClient();
 

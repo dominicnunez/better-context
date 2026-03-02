@@ -2,8 +2,8 @@
 	import { MessageSquare, Loader2, Send, BookOpen } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 	import { onMount } from 'svelte';
-	import { env } from '$env/dynamic/public';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import ChatMessages from '$lib/components/ChatMessages.svelte';
 	import { getAuthState } from '$lib/stores/auth.svelte';
@@ -28,7 +28,7 @@
 	const projectStore = getProjectStore();
 
 	const getConvexHttpBaseUrl = (url: string) => url.replace('.convex.cloud', '.convex.site');
-	const convexHttpBaseUrl = getConvexHttpBaseUrl(env.PUBLIC_CONVEX_URL!);
+	const convexHttpBaseUrl = getConvexHttpBaseUrl(PUBLIC_CONVEX_URL);
 
 	// Convex queries - only query if we have a real thread ID
 	const threadQuery = $derived.by(() => {
