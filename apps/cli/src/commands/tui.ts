@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { Effect } from 'effect';
 import { ensureServer, type ServerManager } from '../server/manager.ts';
-import { createClient, getConfig } from '../client/index.ts';
+import { createClient, getConfigEffect } from '../client/index.ts';
 import { runCliEffect } from '../effect/runtime.ts';
 import { setTelemetryContext, trackTelemetryEvent } from '../lib/telemetry.ts';
 
@@ -67,7 +67,7 @@ const launchTuiPromise = async (options: TuiOptions): Promise<void> => {
 		await runCliEffect(
 			Effect.gen(function* () {
 				const client = createClient(server.url);
-				const config = yield* Effect.tryPromise(() => getConfig(client));
+				const config = yield* getConfigEffect(client);
 				yield* Effect.sync(() =>
 					setTelemetryContext({ provider: config.provider, model: config.model })
 				);
