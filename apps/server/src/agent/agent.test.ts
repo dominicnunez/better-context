@@ -74,8 +74,8 @@ describe('Agent', () => {
 
 			const result = await Effect.runPromise(
 				agent.ask({
-				collection,
-				question: 'What number is the answer to life according to the README?'
+					collection,
+					question: 'What number is the answer to life according to the README?'
 				})
 			);
 
@@ -107,8 +107,8 @@ describe('Agent', () => {
 
 			const { stream, model } = await Effect.runPromise(
 				agent.askStream({
-				collection,
-				question: 'What is the capital of France according to the data file?'
+					collection,
+					question: 'What is the capital of France according to the data file?'
 				})
 			);
 
@@ -161,8 +161,8 @@ describe('Agent', () => {
 
 			const result = await Effect.runPromise(
 				agent.ask({
-				collection,
-				question: 'What number is the answer according to the README?'
+					collection,
+					question: 'What number is the answer according to the README?'
 				})
 			);
 
@@ -209,8 +209,8 @@ describe('Agent', () => {
 
 			const { stream } = await Effect.runPromise(
 				agent.askStream({
-				collection,
-				question: 'What is the capital of France according to the README?'
+					collection,
+					question: 'What is the capital of France according to the README?'
 				})
 			);
 

@@ -7,11 +7,7 @@ import * as readline from 'readline';
 import { mkdir } from 'node:fs/promises';
 import select from '@inquirer/select';
 import { Effect } from 'effect';
-import {
-	askQuestionEffect,
-	createClient,
-	getResourcesEffect
-} from '../client/index.ts';
+import { askQuestionEffect, createClient, getResourcesEffect } from '../client/index.ts';
 import { ensureServerEffect } from '../server/manager.ts';
 import { runCliEffect } from '../effect/runtime.ts';
 import packageJson from '../../package.json';
@@ -307,9 +303,7 @@ const configureEditor = async (editor: McpEditor) => {
 	throw new Error(`Unsupported editor: ${editor}`);
 };
 
-export const runMcpServerCommand = (args: {
-	globalOpts?: { server?: string; port?: number };
-}) =>
+export const runMcpServerCommand = (args: { globalOpts?: { server?: string; port?: number } }) =>
 	Effect.tryPromise(async () => {
 		const serverManager = await runCliEffect(
 			ensureServerEffect({
@@ -354,7 +348,7 @@ export const runMcpServerCommand = (args: {
 			},
 			async () => {
 				try {
-				const resourcesResult = await runCliEffect(getResourcesEffect(client));
+					const resourcesResult = await runCliEffect(getResourcesEffect(client));
 					return jsonResult(resourcesResult.resources);
 				} catch (error) {
 					return errorResult(error);
@@ -372,13 +366,13 @@ export const runMcpServerCommand = (args: {
 			async (args: AskInput) => {
 				const { question, resources } = args;
 				try {
-				const answerResult = await runCliEffect(
-					askQuestionEffect(client, {
-						question,
-						resources,
-						quiet: true
-					})
-				);
+					const answerResult = await runCliEffect(
+						askQuestionEffect(client, {
+							question,
+							resources,
+							quiet: true
+						})
+					);
 					return textResult(answerResult.answer);
 				} catch (error) {
 					return errorResult(error);

@@ -29,7 +29,10 @@ export type CollectionsService = {
 		resourceNames: readonly string[];
 		quiet?: boolean;
 	}) => Effect.Effect<CollectionResult, CollectionError, never>;
-	loadPromise: (args: { resourceNames: readonly string[]; quiet?: boolean }) => Promise<CollectionResult>;
+	loadPromise: (args: {
+		resourceNames: readonly string[];
+		quiet?: boolean;
+	}) => Promise<CollectionResult>;
 };
 
 const encodePathSegments = (value: string) => value.split('/').map(encodeURIComponent).join('/');

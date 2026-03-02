@@ -9,7 +9,7 @@ import { action } from './_generated/server';
 import { AnalyticsEvents } from './analyticsEvents';
 import { instances } from './apiHelpers';
 import type { ApiKeyValidationResult } from './clerkApiKeys';
-import { getAvailableMcpResourceNames, toMcpVisibleResources } from './mcp/resource-contract.ts';
+import { getAvailableMcpResourceNames, toMcpVisibleResources } from './mcp/resourceContract.ts';
 import { withPrivateApiKey } from './privateWrappers';
 import { toWebError, type WebError } from '../lib/result/errors';
 
@@ -390,6 +390,17 @@ export const listResources = action({
 		const { custom } = await ctx.runQuery(internal.resources.listAvailableForProject, {
 			projectId,
 			includePrivate: false
+		});
+
+		await ctx.scheduler.runAfter(0, internal.analytics.trackEvent, {
+			distinctId: validation.clerkUserId,
+			event: AnalyticsEvents.MCP_LIST_RESOURCES,
+			properties: {
+				instanceId,
+				project: projectName || 'default',
+				projectId,
+				resourceCount: custom.length
+			}
 		});
 
 		return {

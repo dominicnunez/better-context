@@ -160,7 +160,9 @@ export const createResourcesService = (config: ConfigServiceShape): ResourcesSer
 
 		if (isGitResource(definition)) {
 			try {
-				return await loadGitResource(definitionToGitArgs(definition, config.resourcesDirectory, quiet));
+				return await loadGitResource(
+					definitionToGitArgs(definition, config.resourcesDirectory, quiet)
+				);
 			} catch (cause) {
 				if (cause instanceof ResourceError) throw cause;
 				throw new ResourceError({

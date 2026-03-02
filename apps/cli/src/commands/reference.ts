@@ -84,6 +84,15 @@ const cloneReference = async (repo: string, destination: string) => {
 	if (exitCode !== 0) throw new Error(`git clone failed with exit code ${exitCode}`);
 };
 
+const pathExists = async (target: string) => {
+	try {
+		await fs.access(target);
+		return true;
+	} catch {
+		return false;
+	}
+};
+
 const printAgentSnippets = () => {
 	console.log('\nCopy/paste into AGENTS.md (optional):');
 	console.log('```md');
@@ -107,7 +116,7 @@ export const runReferenceCommand = (repo: string) =>
 		const referencesDir = path.join(cwd, REFERENCES_DIR);
 		const destination = path.join(referencesDir, repoName);
 
-		if (await Bun.file(destination).exists()) {
+		if (await pathExists(destination)) {
 			throw new Error(`Reference destination already exists: ${destination}`);
 		}
 

@@ -1,4 +1,4 @@
-import { env } from '$env/dynamic/public';
+import { PUBLIC_CLERK_PUBLISHABLE_KEY } from '$env/static/public';
 import { Clerk } from '@clerk/clerk-js';
 import { dev } from '$app/environment';
 
@@ -36,7 +36,7 @@ export async function initializeClerk(): Promise<Clerk> {
 	suppressBeforeUnloadInDev();
 
 	initPromise = (async () => {
-		clerkInstance = new Clerk(env.PUBLIC_CLERK_PUBLISHABLE_KEY!);
+		clerkInstance = new Clerk(PUBLIC_CLERK_PUBLISHABLE_KEY);
 		await clerkInstance.load();
 
 		return clerkInstance;

@@ -71,7 +71,9 @@ export const runDisconnectCommand = (args: {
 						providers.connected.length > 0
 							? `Connected providers: ${providers.connected.join(', ')}`
 							: 'No providers are currently connected.';
-					return yield* Effect.fail(new Error(`Provider "${args.provider}" is not connected. ${hint}`));
+					return yield* Effect.fail(
+						new Error(`Provider "${args.provider}" is not connected. ${hint}`)
+					);
 				}
 
 				if (providers.connected.length === 0) {

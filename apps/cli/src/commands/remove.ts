@@ -1,11 +1,7 @@
 import * as readline from 'readline';
 import { Effect } from 'effect';
 import { withServerEffect } from '../server/manager.ts';
-import {
-	createClient,
-	getResourcesEffect,
-	removeResourceEffect
-} from '../client/index.ts';
+import { createClient, getResourcesEffect, removeResourceEffect } from '../client/index.ts';
 import { dim } from '../lib/utils/colors.ts';
 
 /**
@@ -97,9 +93,7 @@ export const runRemoveCommand = (args: {
 				const names = resources.map((r) => r.name);
 				const resourceName = args.name
 					? args.name
-					: yield* Effect.tryPromise(() =>
-							selectSingleResource(resources as ResourceDefinition[])
-						);
+					: yield* Effect.tryPromise(() => selectSingleResource(resources as ResourceDefinition[]));
 
 				if (!names.includes(resourceName)) {
 					return yield* Effect.fail(

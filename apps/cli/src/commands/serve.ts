@@ -11,10 +11,10 @@ export const runServeCommand = (options: { port?: number } = {}) =>
 		const startedAt = Date.now();
 		const port = options.port ?? DEFAULT_PORT;
 
-		yield* Effect.sync(() => console.log(`Starting btca server on port ${port}...`));
-		const server = yield* Effect.tryPromise(() => startServer({ port }));
-
 		try {
+			yield* Effect.sync(() => console.log(`Starting btca server on port ${port}...`));
+			const server = yield* Effect.tryPromise(() => startServer({ port }));
+
 			try {
 				const client = createClient(server.url);
 				const config = yield* getConfigEffect(client);
@@ -24,6 +24,7 @@ export const runServeCommand = (options: { port?: number } = {}) =>
 			} catch {
 				// Ignore config failures for telemetry
 			}
+
 			yield* Effect.tryPromise(() =>
 				trackTelemetryEvent({
 					event: 'cli_started',
@@ -56,15 +57,25 @@ export const runServeCommand = (options: { port?: number } = {}) =>
 						process.on('SIGTERM', shutdown);
 					})
 			);
+			yield* Effect.tryPromise(() =>
+				trackTelemetryEvent({
+					event: 'cli_server_completed',
+					properties: {
+						command: commandName,
+						mode: 'serve',
+						durationMs: Date.now() - startedAt,
+						exitCode: 0
+					}
+				})
+			);
 		} catch (error) {
-			const durationMs = Date.now() - startedAt;
 			yield* Effect.tryPromise(() =>
 				trackTelemetryEvent({
 					event: 'cli_server_failed',
 					properties: {
 						command: commandName,
 						mode: 'serve',
-						durationMs,
+						durationMs: Date.now() - startedAt,
 						errorName: error instanceof Error ? error.name : 'UnknownError',
 						exitCode: 1
 					}

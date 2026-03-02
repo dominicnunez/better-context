@@ -2,8 +2,8 @@
 	import { Loader2, Menu } from '@lucide/svelte';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
+	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 	import { setupConvex, useConvexClient, useQuery } from 'convex-svelte';
-	import { env } from '$env/dynamic/public';
 	import { initializeClerk, getClerk } from '$lib/clerk';
 	import { setAuthState, getAuthState, setInstanceId } from '$lib/stores/auth.svelte';
 	import { setBillingStore } from '$lib/stores/billing.svelte';
@@ -19,10 +19,12 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import ProvisioningModal from '$lib/components/ProvisioningModal.svelte';
 	import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
+	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import AddResourceModal from '$lib/components/AddResourceModal.svelte';
 
 	let { children } = $props();
 
-	setupConvex(env.PUBLIC_CONVEX_URL!);
+	setupConvex(PUBLIC_CONVEX_URL);
 
 	const client = useConvexClient();
 
@@ -46,6 +48,15 @@
 
 	let isInitializing = $state(true);
 	let sidebarOpen = $state(false);
+	let commandPaletteOpen = $state(false);
+	let addResourceModalOpen = $state(false);
+
+	function handleGlobalKeydown(event: KeyboardEvent) {
+		if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+			event.preventDefault();
+			commandPaletteOpen = !commandPaletteOpen;
+		}
+	}
 
 	const routeId = $derived((page.params as { id?: string }).id);
 	const currentThreadId = $derived(routeId && routeId !== 'new' ? routeId : null);
@@ -134,6 +145,8 @@
 	});
 </script>
 
+<svelte:window onkeydown={handleGlobalKeydown} />
+
 <svelte:head>
 	<title>btca | App</title>
 	<meta name="description" content="Web-based chat interface for btca" />
@@ -162,6 +175,7 @@
 				{currentThreadId}
 				isOpen={sidebarOpen}
 				isLoading={threadsLoading}
+				onOpenCommandPalette={() => (commandPaletteOpen = true)}
 				on:close={() => (sidebarOpen = false)}
 			/>
 		</aside>
@@ -189,3 +203,10 @@
 
 <ProvisioningModal />
 <CreateProjectModal {projectStore} />
+<CommandPalette
+	isOpen={commandPaletteOpen}
+	{threads}
+	onClose={() => (commandPaletteOpen = false)}
+	onOpenAddResource={() => (addResourceModalOpen = true)}
+/>
+<AddResourceModal isOpen={addResourceModalOpen} onClose={() => (addResourceModalOpen = false)} />

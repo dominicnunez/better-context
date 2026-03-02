@@ -266,9 +266,9 @@ const runWithServer = <A>(
 	runCliEffect(
 		withServerEffect(
 			{
-			serverUrl: globalOpts?.server,
-			port: globalOpts?.port,
-			quiet: true
+				serverUrl: globalOpts?.server,
+				port: globalOpts?.port,
+				quiet: true
 			},
 			(server) => run(server.url)
 		)

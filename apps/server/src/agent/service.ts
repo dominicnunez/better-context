@@ -87,20 +87,26 @@ export class ProviderNotConnectedError extends Error {
 }
 
 export type AgentService = {
-	askStream: (args: { collection: CollectionResult; question: string }) => Effect.Effect<{
-		stream: AsyncIterable<AgentEvent>;
-		model: { provider: string; model: string };
-	}, unknown>;
+	askStream: (args: { collection: CollectionResult; question: string }) => Effect.Effect<
+		{
+			stream: AsyncIterable<AgentEvent>;
+			model: { provider: string; model: string };
+		},
+		unknown
+	>;
 
 	ask: (args: {
 		collection: CollectionResult;
 		question: string;
 	}) => Effect.Effect<AgentResult, unknown>;
 
-	listProviders: () => Effect.Effect<{
-		all: { id: string; models: Record<string, unknown> }[];
-		connected: string[];
-	}, unknown>;
+	listProviders: () => Effect.Effect<
+		{
+			all: { id: string; models: Record<string, unknown> }[];
+			connected: string[];
+		},
+		unknown
+	>;
 };
 
 export type Service = AgentService;
@@ -132,7 +138,13 @@ export const createAgentService = (config: ConfigServiceShape): AgentService => 
 	/**
 	 * Ask a question and stream the response using the new AI SDK loop
 	 */
-	const askStreamImpl = async ({ collection, question }: { collection: CollectionResult; question: string }) => {
+	const askStreamImpl = async ({
+		collection,
+		question
+	}: {
+		collection: CollectionResult;
+		question: string;
+	}) => {
 		metricsInfo('agent.ask.start', {
 			provider: config.provider,
 			model: config.model,
@@ -176,7 +188,13 @@ export const createAgentService = (config: ConfigServiceShape): AgentService => 
 	/**
 	 * Ask a question and return the complete response
 	 */
-	const askImpl = async ({ collection, question }: { collection: CollectionResult; question: string }) => {
+	const askImpl = async ({
+		collection,
+		question
+	}: {
+		collection: CollectionResult;
+		question: string;
+	}) => {
 		try {
 			metricsInfo('agent.ask.start', {
 				provider: config.provider,
@@ -201,7 +219,8 @@ export const createAgentService = (config: ConfigServiceShape): AgentService => 
 			} catch (cause) {
 				throw new AgentError({
 					message: getErrorMessage(cause),
-					hint: getErrorHint(cause) ?? 'This may be a temporary issue. Try running the command again.',
+					hint:
+						getErrorHint(cause) ?? 'This may be a temporary issue. Try running the command again.',
 					cause
 				});
 			}

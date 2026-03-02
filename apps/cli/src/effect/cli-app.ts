@@ -20,6 +20,7 @@ import {
 	runTelemetryStatusCommand
 } from '../commands/telemetry.ts';
 import { runWipeCommand } from '../commands/wipe.ts';
+import { runTrackedCliCommand } from '../lib/telemetry.ts';
 import { normalizeCliArgv } from './argv.ts';
 import { formatCliCommandError } from './errors.ts';
 
@@ -40,9 +41,28 @@ const resolveServerOptions = ({
 	quiet: true
 });
 
+const trackCommand = <A>(args: {
+	command: string;
+	mode: string;
+	eventName?: string;
+	startProperties?: Record<string, unknown>;
+	action: () => Effect.Effect<A, unknown, never>;
+}) =>
+	Effect.tryPromise(() =>
+		runTrackedCliCommand({
+			...args,
+			action: () => Effect.runPromise(args.action())
+		})
+	);
+
 const clear = Command.make('clear', { server: serverFlag, port: portFlag }, ({ server, port }) =>
-	runClearCommand(resolveServerOptions({ server, port }))
+	trackCommand({
+		command: 'clear',
+		mode: 'clear',
+		action: () => runClearCommand(resolveServerOptions({ server, port }))
+	})
 );
+
 const add = Command.make(
 	'add',
 	{
@@ -57,17 +77,24 @@ const add = Command.make(
 		port: portFlag
 	},
 	({ reference, global, name, branch, searchPath, notes, type, server, port }) =>
-		runAddCommand({
-			reference: Option.getOrUndefined(reference),
-			global,
-			name: Option.getOrUndefined(name),
-			branch: Option.getOrUndefined(branch),
-			searchPath: [...searchPath],
-			notes: Option.getOrUndefined(notes),
-			type: Option.getOrUndefined(type),
-			globalOpts: resolveServerOptions({ server, port })
+		trackCommand({
+			command: 'add',
+			mode: 'add',
+			startProperties: { global },
+			action: () =>
+				runAddCommand({
+					reference: Option.getOrUndefined(reference),
+					global,
+					name: Option.getOrUndefined(name),
+					branch: Option.getOrUndefined(branch),
+					searchPath: [...searchPath],
+					notes: Option.getOrUndefined(notes),
+					type: Option.getOrUndefined(type),
+					globalOpts: resolveServerOptions({ server, port })
+				})
 		})
 );
+
 const ask = Command.make(
 	'ask',
 	{
@@ -96,19 +123,35 @@ const resources = Command.make(
 	'resources',
 	{ server: serverFlag, port: portFlag },
 	({ server, port }) =>
-		runResourcesCommand(resolveServerOptions({ server, port }))
+		trackCommand({
+			command: 'resources',
+			mode: 'resources',
+			action: () => runResourcesCommand(resolveServerOptions({ server, port }))
+		})
 );
 
 const status = Command.make('status', { server: serverFlag, port: portFlag }, ({ server, port }) =>
-	runStatusCommand(resolveServerOptions({ server, port }))
+	trackCommand({
+		command: 'status',
+		mode: 'status',
+		action: () => runStatusCommand(resolveServerOptions({ server, port }))
+	})
 );
+
 const init = Command.make(
 	'init',
 	{
 		force: pipe(Flag.boolean('force'), Flag.withAlias('f'))
 	},
-	({ force }) => runInitCommand({ force })
+	({ force }) =>
+		trackCommand({
+			command: 'init',
+			mode: 'init',
+			startProperties: { force },
+			action: () => runInitCommand({ force })
+		})
 );
+
 const mcp = pipe(
 	Command.make(
 		'mcp',
@@ -117,18 +160,28 @@ const mcp = pipe(
 			server: serverFlag,
 			port: portFlag
 		},
-		({ mode, server, port }) => {
-			const selectedMode = Option.getOrUndefined(mode);
-			if (!selectedMode) {
-				return runMcpServerCommand({ globalOpts: resolveServerOptions({ server, port }) });
-			}
-			if (selectedMode === 'local') {
-				return runMcpConfigureLocalCommand();
-			}
-			return Effect.fail(new Error(`Unknown mcp mode "${selectedMode}". Use "local" or omit it.`));
-		}
+		({ mode, server, port }) =>
+			trackCommand({
+				command: 'mcp',
+				mode: Option.getOrUndefined(mode) === 'local' ? 'mcp:local' : 'mcp',
+				eventName: Option.getOrUndefined(mode) === 'local' ? 'mcp_local' : 'mcp',
+				startProperties: { mcpMode: Option.getOrUndefined(mode) ?? 'server' },
+				action: () => {
+					const selectedMode = Option.getOrUndefined(mode);
+					if (!selectedMode) {
+						return runMcpServerCommand({ globalOpts: resolveServerOptions({ server, port }) });
+					}
+					if (selectedMode === 'local') {
+						return runMcpConfigureLocalCommand();
+					}
+					return Effect.fail(
+						new Error(`Unknown mcp mode "${selectedMode}". Use "local" or omit it.`)
+					);
+				}
+			})
 	)
 );
+
 const connect = Command.make(
 	'connect',
 	{
@@ -139,13 +192,24 @@ const connect = Command.make(
 		port: portFlag
 	},
 	({ global, provider, model, server, port }) =>
-		runConnectCommand({
-			global,
-			provider: Option.getOrUndefined(provider),
-			model: Option.getOrUndefined(model),
-			globalOpts: resolveServerOptions({ server, port })
+		trackCommand({
+			command: 'connect',
+			mode: 'connect',
+			startProperties: {
+				global,
+				provider: Option.getOrUndefined(provider),
+				model: Option.getOrUndefined(model)
+			},
+			action: () =>
+				runConnectCommand({
+					global,
+					provider: Option.getOrUndefined(provider),
+					model: Option.getOrUndefined(model),
+					globalOpts: resolveServerOptions({ server, port })
+				})
 		})
 );
+
 const disconnect = Command.make(
 	'disconnect',
 	{
@@ -154,18 +218,32 @@ const disconnect = Command.make(
 		port: portFlag
 	},
 	({ provider, server, port }) =>
-		runDisconnectCommand({
-			provider: Option.getOrUndefined(provider),
-			globalOpts: resolveServerOptions({ server, port })
+		trackCommand({
+			command: 'disconnect',
+			mode: 'disconnect',
+			startProperties: { provider: Option.getOrUndefined(provider) },
+			action: () =>
+				runDisconnectCommand({
+					provider: Option.getOrUndefined(provider),
+					globalOpts: resolveServerOptions({ server, port })
+				})
 		})
 );
+
 const reference = Command.make(
 	'reference',
 	{
 		repo: Argument.string('repo')
 	},
-	({ repo }) => runReferenceCommand(repo)
+	({ repo }) =>
+		trackCommand({
+			command: 'reference',
+			mode: 'reference',
+			startProperties: { repo },
+			action: () => runReferenceCommand(repo)
+		})
 );
+
 const serve = Command.make(
 	'serve',
 	{
@@ -173,6 +251,7 @@ const serve = Command.make(
 	},
 	({ port }) => runServeCommand({ port: Option.getOrUndefined(port) })
 );
+
 const remove = Command.make(
 	'remove',
 	{
@@ -182,27 +261,75 @@ const remove = Command.make(
 		port: portFlag
 	},
 	({ name, global, server, port }) =>
-		runRemoveCommand({
-			name: Option.getOrUndefined(name),
-			global,
-			globalOpts: resolveServerOptions({ server, port })
+		trackCommand({
+			command: 'remove',
+			mode: 'remove',
+			startProperties: {
+				global,
+				name: Option.getOrUndefined(name)
+			},
+			action: () =>
+				runRemoveCommand({
+					name: Option.getOrUndefined(name),
+					global,
+					globalOpts: resolveServerOptions({ server, port })
+				})
 		})
 );
-const skill = Command.make('skill', {}, () => runSkillCommand());
+
+const skill = Command.make('skill', {}, () =>
+	trackCommand({
+		command: 'skill',
+		mode: 'skill',
+		action: () => runSkillCommand()
+	})
+);
+
 const telemetry = pipe(
 	Command.make('telemetry'),
 	Command.withSubcommands([
-		Command.make('on', {}, () => runTelemetryOnCommand()),
-		Command.make('off', {}, () => runTelemetryOffCommand()),
-		Command.make('status', {}, () => runTelemetryStatusCommand())
+		Command.make('on', {}, () =>
+			trackCommand({
+				command: 'telemetry',
+				mode: 'telemetry:on',
+				eventName: 'telemetry_on',
+				startProperties: { subcommand: 'on' },
+				action: () => runTelemetryOnCommand()
+			})
+		),
+		Command.make('off', {}, () =>
+			trackCommand({
+				command: 'telemetry',
+				mode: 'telemetry:off',
+				eventName: 'telemetry_off',
+				startProperties: { subcommand: 'off' },
+				action: () => runTelemetryOffCommand()
+			})
+		),
+		Command.make('status', {}, () =>
+			trackCommand({
+				command: 'telemetry',
+				mode: 'telemetry:status',
+				eventName: 'telemetry_status',
+				startProperties: { subcommand: 'status' },
+				action: () => runTelemetryStatusCommand()
+			})
+		)
 	])
 );
+
 const wipe = Command.make(
 	'wipe',
 	{
 		yes: pipe(Flag.boolean('yes'), Flag.withAlias('y'))
 	},
-	({ yes }) => runWipeCommand({ yes })
+	({ yes }) =>
+		trackCommand({
+			command: 'wipe',
+			mode: 'wipe',
+			startProperties: { yes },
+			action: () => runWipeCommand({ yes })
+		})
 );
 
 const root = pipe(

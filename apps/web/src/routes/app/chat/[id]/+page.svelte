@@ -2,8 +2,8 @@
 	import { MessageSquare, Loader2, Send, BookOpen } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 	import { onMount } from 'svelte';
-	import { env } from '$env/dynamic/public';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import ChatMessages from '$lib/components/ChatMessages.svelte';
 	import { getAuthState } from '$lib/stores/auth.svelte';
@@ -28,7 +28,7 @@
 	const projectStore = getProjectStore();
 
 	const getConvexHttpBaseUrl = (url: string) => url.replace('.convex.cloud', '.convex.site');
-	const convexHttpBaseUrl = getConvexHttpBaseUrl(env.PUBLIC_CONVEX_URL!);
+	const convexHttpBaseUrl = getConvexHttpBaseUrl(PUBLIC_CONVEX_URL);
 
 	// Convex queries - only query if we have a real thread ID
 	const threadQuery = $derived.by(() => {
@@ -673,7 +673,11 @@
 	// Convert Convex messages to the format expected by ChatMessages
 	type Message = import('$lib/types').Message;
 	const displayMessages = $derived.by((): Message[] => {
-		const msgs = messages.map((m): Message => {
+		const visibleMessages = messages.filter(
+			(m) => !(isStreamingThisThread && activeStream?.messageId === m._id && m.role === 'assistant')
+		);
+
+		const msgs = visibleMessages.map((m): Message => {
 			if (m.role === 'user') {
 				return {
 					id: m._id as string,
@@ -682,13 +686,21 @@
 					resources: m.resources ?? []
 				};
 			}
-			// Assistant messages - content can be string or { type: 'chunks', chunks: [] }
+
+			if (m.role === 'assistant') {
+				return {
+					id: m._id as string,
+					role: 'assistant',
+					content: m.content,
+					canceled: m.canceled
+				};
+			}
+
 			return {
 				id: m._id as string,
-				role: 'assistant',
-				content: m.content,
-				canceled: m.canceled
-			} as Message;
+				role: 'system',
+				content: m.content as string
+			};
 		});
 
 		// Add pending user message if exists (shown immediately while waiting for stream)

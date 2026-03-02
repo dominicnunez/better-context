@@ -138,17 +138,21 @@ export const getConfig = (client: Client) => Effect.runPromise(getConfigEffect(c
 /**
  * Get available resources
  */
-export const getResourcesEffect = (
-	client: Client
-): Effect.Effect<ResourcesResponse, BtcaError> =>
-	requestJson<ResourcesResponse>(`${client.baseUrl}/resources`, undefined, 'Failed to get resources');
+export const getResourcesEffect = (client: Client): Effect.Effect<ResourcesResponse, BtcaError> =>
+	requestJson<ResourcesResponse>(
+		`${client.baseUrl}/resources`,
+		undefined,
+		'Failed to get resources'
+	);
 
 export const getResources = (client: Client) => Effect.runPromise(getResourcesEffect(client));
 
-export const getProvidersEffect = (
-	client: Client
-): Effect.Effect<ProvidersResponse, BtcaError> =>
-	requestJson<ProvidersResponse>(`${client.baseUrl}/providers`, undefined, 'Failed to get providers');
+export const getProvidersEffect = (client: Client): Effect.Effect<ProvidersResponse, BtcaError> =>
+	requestJson<ProvidersResponse>(
+		`${client.baseUrl}/providers`,
+		undefined,
+		'Failed to get providers'
+	);
 
 export const getProviders = (client: Client) => Effect.runPromise(getProvidersEffect(client));
 

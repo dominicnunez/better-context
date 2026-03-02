@@ -381,12 +381,14 @@ describe('Config', () => {
 			expect(config.resources.length).toBe(3);
 
 			// Add a new resource
-			await Effect.runPromise(config.addResource({
-				name: 'new-resource',
-				type: 'git',
-				url: 'https://github.com/test/new-resource',
-				branch: 'main'
-			}));
+			await Effect.runPromise(
+				config.addResource({
+					name: 'new-resource',
+					type: 'git',
+					url: 'https://github.com/test/new-resource',
+					branch: 'main'
+				})
+			);
 
 			// Verify merged state shows 4 resources
 			expect(config.resources.length).toBe(4);
@@ -575,12 +577,14 @@ describe('Config', () => {
 			const config = await Config.load();
 
 			// Add a resource (should go to global)
-			await Effect.runPromise(config.addResource({
-				name: 'new-resource',
-				type: 'git',
-				url: 'https://github.com/test/new-resource',
-				branch: 'main'
-			}));
+			await Effect.runPromise(
+				config.addResource({
+					name: 'new-resource',
+					type: 'git',
+					url: 'https://github.com/test/new-resource',
+					branch: 'main'
+				})
+			);
 
 			expect(config.resources.length).toBe(2);
 

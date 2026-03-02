@@ -153,7 +153,10 @@ export const runStatusCommand = (globalOpts?: { server?: string; port?: number }
 					console.log(`Selected provider authed: ${isAuthenticated ? 'yes' : 'no'}`);
 					console.log('');
 
-					printResourceList('Global resources', globalConfig ? listResourceNames(globalConfig) : null);
+					printResourceList(
+						'Global resources',
+						globalConfig ? listResourceNames(globalConfig) : null
+					);
 					printResourceList(
 						'Project resources',
 						projectConfig ? listResourceNames(projectConfig) : null

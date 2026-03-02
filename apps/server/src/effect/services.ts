@@ -126,7 +126,9 @@ export const updateModelConfig = (args: {
 	model: string;
 	providerOptions?: Parameters<ConfigServiceShape['updateModel']>[2];
 }) =>
-	Effect.flatMap(configService, (config) => config.updateModel(args.provider, args.model, args.providerOptions));
+	Effect.flatMap(configService, (config) =>
+		config.updateModel(args.provider, args.model, args.providerOptions)
+	);
 
 export const addConfigResource = (
 	resource: ResourceDefinition
@@ -136,7 +138,9 @@ export const addConfigResource = (
 export const removeConfigResource = (name: string): Effect.Effect<void, unknown, ConfigService> =>
 	Effect.flatMap(configService, (config) => config.removeResource(name));
 
-export const clearConfigResources = Effect.flatMap(configService, (config) => config.clearResources());
+export const clearConfigResources = Effect.flatMap(configService, (config) =>
+	config.clearResources()
+);
 
 export const loadedResourceCollectionKey = (resourceNames: readonly string[]) =>
 	getCollectionKey(resourceNames);

@@ -11,8 +11,10 @@
 		"directory": "apps/analytics-proxy"
 	},
 	"scripts": {
+		"check": "bunx prettier --check README.md package.json",
 		"docker:build": "docker build -t btca-analytics-proxy .",
 		"docker:run": "docker run --rm -p 8080:8080 -e POSTHOG_CLOUD_REGION=us btca-analytics-proxy",
-		"docker:run:eu": "docker run --rm -p 8080:8080 -e POSTHOG_CLOUD_REGION=eu btca-analytics-proxy"
+		"docker:run:eu": "docker run --rm -p 8080:8080 -e POSTHOG_CLOUD_REGION=eu btca-analytics-proxy",
+		"format": "bunx prettier --write README.md package.json"
 	}
 }
