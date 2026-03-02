@@ -48,12 +48,18 @@ const trackCommand = <A>(args: {
 	startProperties?: Record<string, unknown>;
 	action: () => Effect.Effect<A, unknown, never>;
 }) =>
-	Effect.tryPromise(() =>
-		runTrackedCliCommand({
-			...args,
-			action: () => Effect.runPromise(args.action())
-		})
-	);
+	Effect.tryPromise({
+		try: () =>
+			runTrackedCliCommand({
+				...args,
+				action: async () => {
+					const exit = await Effect.runPromiseExit(args.action());
+					if (Exit.isSuccess(exit)) return exit.value;
+					throw Cause.squash(exit.cause);
+				}
+			}),
+		catch: (cause) => cause
+	});
 
 const clear = Command.make('clear', { server: serverFlag, port: portFlag }, ({ server, port }) =>
 	trackCommand({

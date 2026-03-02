@@ -281,3 +281,76 @@ export const importDirectoryIntoVirtualFs = async (args: {
 	await mkdirVirtualFs(dest, { recursive: true }, vfsId);
 	await walk(base);
 };
+
+export const importPathsIntoVirtualFs = async (args: {
+	sourcePath: string;
+	destinationPath: string;
+	relativePaths: readonly string[];
+	vfsId?: string;
+}) => {
+	const base = path.resolve(args.sourcePath);
+	const dest = normalizeVfsPath(args.destinationPath);
+	const vfsId = args.vfsId;
+	const uniquePaths = Array.from(
+		new Set(
+			args.relativePaths
+				.map((relativePath) => relativePath.trim())
+				.filter((relativePath) => relativePath.length > 0 && relativePath !== '.')
+		)
+	).sort((left, right) => left.localeCompare(right));
+
+	await mkdirVirtualFs(dest, { recursive: true }, vfsId);
+
+	for (const relativePath of uniquePaths) {
+		const sourcePath = path.join(base, relativePath);
+		const destinationPath = normalizeVfsPath(
+			posix.join(dest, relativePath.split(path.sep).join('/'))
+		);
+
+		let stat: Awaited<ReturnType<typeof fs.lstat>> | null = null;
+		try {
+			stat = await fs.lstat(sourcePath);
+		} catch {
+			stat = null;
+		}
+		if (!stat) continue;
+
+		await mkdirVirtualFs(posix.dirname(destinationPath), { recursive: true }, vfsId);
+
+		if (stat.isDirectory()) {
+			await mkdirVirtualFs(destinationPath, { recursive: true }, vfsId);
+			continue;
+		}
+
+		if (stat.isSymbolicLink()) {
+			let target: string | null = null;
+			try {
+				target = await fs.readlink(sourcePath);
+			} catch {
+				target = null;
+			}
+			if (!target) continue;
+			try {
+				await symlinkVirtualFs(target, destinationPath, vfsId);
+			} catch {
+				// Ignore invalid symlink entries while importing.
+			}
+			continue;
+		}
+
+		if (!stat.isFile()) continue;
+
+		let buffer: Buffer | null = null;
+		try {
+			buffer = await fs.readFile(sourcePath);
+		} catch {
+			buffer = null;
+		}
+		if (!buffer) continue;
+		try {
+			await writeVirtualFsFile(destinationPath, buffer, vfsId);
+		} catch {
+			// Ignore individual file write errors while importing.
+		}
+	}
+};

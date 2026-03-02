@@ -627,4 +627,8 @@ export const runAddCommand = (args: {
 	notes?: string;
 	type?: string;
 	globalOpts?: { server?: string; port?: number };
-}) => Effect.tryPromise(() => runAddCommandPromise(args));
+}) =>
+	Effect.tryPromise({
+		try: () => runAddCommandPromise(args),
+		catch: (error) => error
+	});

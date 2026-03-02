@@ -15,6 +15,7 @@ import {
 	createVirtualFs,
 	disposeVirtualFs,
 	importDirectoryIntoVirtualFs,
+	importPathsIntoVirtualFs,
 	mkdirVirtualFs,
 	rmVirtualFs
 } from '../vfs/virtual-fs.ts';
@@ -95,6 +96,53 @@ const ignoreErrors = async (action: () => Promise<unknown>) => {
 	}
 };
 
+const LOCAL_RESOURCE_IGNORED_DIRECTORIES = new Set([
+	'.git',
+	'.turbo',
+	'.next',
+	'.svelte-kit',
+	'.vercel',
+	'.cache',
+	'coverage',
+	'dist',
+	'build',
+	'out',
+	'node_modules'
+]);
+
+const normalizeRelativePath = (value: string) => value.split(path.sep).join('/');
+
+const shouldIgnoreImportedPath = (resource: BtcaFsResource, relativePath: string) => {
+	const normalized = normalizeRelativePath(relativePath);
+	if (!normalized || normalized === '.') return false;
+	const segments = normalized.split('/');
+	if (segments.includes('.git')) return true;
+	if (resource.type !== 'local') return false;
+	return segments.some((segment) => LOCAL_RESOURCE_IGNORED_DIRECTORIES.has(segment));
+};
+
+const listGitVisiblePaths = async (resourcePath: string) => {
+	try {
+		const proc = Bun.spawn(
+			['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+			{
+				cwd: resourcePath,
+				stdout: 'pipe',
+				stderr: 'ignore'
+			}
+		);
+		const stdout = await new Response(proc.stdout).text();
+		const exitCode = await proc.exited;
+		if (exitCode !== 0) return null;
+		return stdout
+			.split('\0')
+			.map((entry) => entry.trim())
+			.filter((entry) => entry.length > 0);
+	} catch {
+		return null;
+	}
+};
+
 const initVirtualRoot = async (collectionPath: string, vfsId: string) => {
 	try {
 		await mkdirVirtualFs(collectionPath, { recursive: true }, vfsId);
@@ -142,16 +190,24 @@ const virtualizeResource = async (args: {
 	vfsId: string;
 }) => {
 	try {
+		if (args.resource.type === 'local') {
+			const gitVisiblePaths = await listGitVisiblePaths(args.resourcePath);
+			if (gitVisiblePaths) {
+				await importPathsIntoVirtualFs({
+					sourcePath: args.resourcePath,
+					destinationPath: args.virtualResourcePath,
+					relativePaths: gitVisiblePaths,
+					vfsId: args.vfsId
+				});
+				return;
+			}
+		}
+
 		await importDirectoryIntoVirtualFs({
 			sourcePath: args.resourcePath,
 			destinationPath: args.virtualResourcePath,
 			vfsId: args.vfsId,
-			ignore: (relativePath) => {
-				const normalized = relativePath.split(path.sep).join('/');
-				return (
-					normalized === '.git' || normalized.startsWith('.git/') || normalized.includes('/.git/')
-				);
-			}
+			ignore: (relativePath) => shouldIgnoreImportedPath(args.resource, relativePath)
 		});
 	} catch (cause) {
 		throw new CollectionError({

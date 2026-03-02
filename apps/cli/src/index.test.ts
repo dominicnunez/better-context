@@ -37,31 +37,24 @@ const withTempHome = async <T>(run: (tempHome: string) => Promise<T>): Promise<T
 	}
 };
 
-const createStubServer = () => {
+const createStubServer = (handlers?: Partial<Record<string, (request: Request) => Response>>) => {
 	const requestPaths: string[] = [];
+	const defaultHandlers: Record<string, (request: Request) => Response> = {
+		'/': () => Response.json({ ok: true }),
+		'/resources': () =>
+			Response.json({ error: 'stub resources error', tag: 'RequestError' }, { status: 500 }),
+		'/config': () =>
+			Response.json({ error: 'stub config error', tag: 'RequestError' }, { status: 500 }),
+		'/providers': () =>
+			Response.json({ error: 'stub providers error', tag: 'RequestError' }, { status: 500 })
+	};
 	const server = Bun.serve({
 		port: 0,
 		fetch: (request) => {
 			const url = new URL(request.url);
 			requestPaths.push(url.pathname);
-			if (url.pathname === '/') {
-				return Response.json({ ok: true });
-			}
-			if (url.pathname === '/resources') {
-				return Response.json(
-					{ error: 'stub resources error', tag: 'RequestError' },
-					{ status: 500 }
-				);
-			}
-			if (url.pathname === '/config') {
-				return Response.json({ error: 'stub config error', tag: 'RequestError' }, { status: 500 });
-			}
-			if (url.pathname === '/providers') {
-				return Response.json(
-					{ error: 'stub providers error', tag: 'RequestError' },
-					{ status: 500 }
-				);
-			}
+			const handler = handlers?.[url.pathname] ?? defaultHandlers[url.pathname];
+			if (handler) return handler(request);
 			return Response.json({ error: 'stub not found', tag: 'RouteNotFound' }, { status: 404 });
 		}
 	});
@@ -152,6 +145,52 @@ describe('cli dispatch', () => {
 			);
 			expect(exitCode).toBe(1);
 			expect(output.join('\n')).toContain('stub resources error');
+			expect(output.join('\n')).not.toContain('An error occurred in Effect.tryPromise');
+		} finally {
+			console.error = originalError;
+			stub.server.stop();
+		}
+	});
+
+	test('preserves backend error messages for add command', async () => {
+		const stub = createStubServer({
+			'/config/resources': () =>
+				Response.json(
+					{
+						error: 'Resource "svelte" already exists',
+						tag: 'ConfigError',
+						hint: 'Choose a different resource name.'
+					},
+					{ status: 400 }
+				)
+		});
+		const originalError = console.error;
+		const output: string[] = [];
+		console.error = (...args) => {
+			output.push(args.map((arg) => String(arg)).join(' '));
+		};
+		try {
+			const exitCode = await withTempHome(() =>
+				runEffectCli(
+					[
+						'bun',
+						'src/index.ts',
+						'add',
+						'.',
+						'--name',
+						'svelte',
+						'--type',
+						'local',
+						'--server',
+						stub.url
+					],
+					'test'
+				)
+			);
+			expect(exitCode).toBe(1);
+			expect(stub.requestPaths).toContain('/config/resources');
+			expect(output.join('\n')).toContain('Resource "svelte" already exists');
+			expect(output.join('\n')).toContain('Hint: Choose a different resource name.');
 			expect(output.join('\n')).not.toContain('An error occurred in Effect.tryPromise');
 		} finally {
 			console.error = originalError;

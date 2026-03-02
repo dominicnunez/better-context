@@ -142,7 +142,8 @@ export const runStatusCommand = (globalOpts?: { server?: string; port?: number }
 				const connected = Array.isArray(providers.connected) ? providers.connected : [];
 				const isAuthenticated = connected.includes(config.provider);
 				const latestVersion = yield* Effect.tryPromise(() => getLatestVersion());
-				const hasUpdate = latestVersion && compareVersions(VERSION, latestVersion) < 0;
+				const versionComparison = latestVersion ? compareVersions(VERSION, latestVersion) : null;
+				const hasUpdate = versionComparison !== null && versionComparison < 0;
 
 				yield* Effect.sync(() => {
 					console.log('\n--- btca status ---\n');
@@ -167,6 +168,8 @@ export const runStatusCommand = (globalOpts?: { server?: string; port?: number }
 						console.log(`Latest version: ${latestVersion}`);
 						if (hasUpdate) {
 							console.log('Update available: run "bun add -g btca@latest"');
+						} else if (versionComparison !== null && versionComparison > 0) {
+							console.log('Installed version is newer than the latest published npm version');
 						} else {
 							console.log('btca is up to date');
 						}
