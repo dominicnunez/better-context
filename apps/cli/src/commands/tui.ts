@@ -57,7 +57,7 @@ const ensureStandaloneTreeSitterWorkerPath = () => {
 /**
  * Launch the interactive TUI
  */
-export async function launchTui(options: TuiOptions): Promise<void> {
+const launchTuiPromise = async (options: TuiOptions): Promise<void> => {
 	const server = await ensureServer({
 		serverUrl: options.server,
 		port: options.port
@@ -105,4 +105,6 @@ export async function launchTui(options: TuiOptions): Promise<void> {
 
 	// Import and run TUI (dynamic import to avoid loading TUI deps when not needed)
 	await runCliEffect(Effect.tryPromise(() => import('../tui/App.tsx')));
-}
+};
+
+export const launchTui = (options: TuiOptions) => Effect.tryPromise(() => launchTuiPromise(options));

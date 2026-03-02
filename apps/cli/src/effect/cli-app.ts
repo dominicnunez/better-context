@@ -21,7 +21,7 @@ import {
 } from '../commands/telemetry.ts';
 import { runWipeCommand } from '../commands/wipe.ts';
 import { normalizeCliArgv } from './argv.ts';
-import { effectFromPromise, formatCliCommandError } from './errors.ts';
+import { formatCliCommandError } from './errors.ts';
 
 const serverFlag = pipe(Flag.string('server'), Flag.optional);
 const portFlag = pipe(Flag.integer('port'), Flag.optional);
@@ -57,18 +57,16 @@ const add = Command.make(
 		port: portFlag
 	},
 	({ reference, global, name, branch, searchPath, notes, type, server, port }) =>
-		effectFromPromise(() =>
-			runAddCommand({
-				reference: Option.getOrUndefined(reference),
-				global,
-				name: Option.getOrUndefined(name),
-				branch: Option.getOrUndefined(branch),
-				searchPath: [...searchPath],
-				notes: Option.getOrUndefined(notes),
-				type: Option.getOrUndefined(type),
-				globalOpts: resolveServerOptions({ server, port })
-			})
-		)
+		runAddCommand({
+			reference: Option.getOrUndefined(reference),
+			global,
+			name: Option.getOrUndefined(name),
+			branch: Option.getOrUndefined(branch),
+			searchPath: [...searchPath],
+			notes: Option.getOrUndefined(notes),
+			type: Option.getOrUndefined(type),
+			globalOpts: resolveServerOptions({ server, port })
+		})
 );
 const ask = Command.make(
 	'ask',
@@ -109,7 +107,7 @@ const init = Command.make(
 	{
 		force: pipe(Flag.boolean('force'), Flag.withAlias('f'))
 	},
-	({ force }) => effectFromPromise(() => runInitCommand({ force }))
+	({ force }) => runInitCommand({ force })
 );
 const mcp = pipe(
 	Command.make(
@@ -119,17 +117,16 @@ const mcp = pipe(
 			server: serverFlag,
 			port: portFlag
 		},
-		({ mode, server, port }) =>
-			effectFromPromise(() => {
-				const selectedMode = Option.getOrUndefined(mode);
-				if (!selectedMode) {
-					return runMcpServerCommand({ globalOpts: resolveServerOptions({ server, port }) });
-				}
-				if (selectedMode === 'local') {
-					return runMcpConfigureLocalCommand();
-				}
-				throw new Error(`Unknown mcp mode "${selectedMode}". Use "local" or omit it.`);
-			})
+		({ mode, server, port }) => {
+			const selectedMode = Option.getOrUndefined(mode);
+			if (!selectedMode) {
+				return runMcpServerCommand({ globalOpts: resolveServerOptions({ server, port }) });
+			}
+			if (selectedMode === 'local') {
+				return runMcpConfigureLocalCommand();
+			}
+			return Effect.fail(new Error(`Unknown mcp mode "${selectedMode}". Use "local" or omit it.`));
+		}
 	)
 );
 const connect = Command.make(
@@ -142,14 +139,12 @@ const connect = Command.make(
 		port: portFlag
 	},
 	({ global, provider, model, server, port }) =>
-		effectFromPromise(() =>
-			runConnectCommand({
-				global,
-				provider: Option.getOrUndefined(provider),
-				model: Option.getOrUndefined(model),
-				globalOpts: resolveServerOptions({ server, port })
-			})
-		)
+		runConnectCommand({
+			global,
+			provider: Option.getOrUndefined(provider),
+			model: Option.getOrUndefined(model),
+			globalOpts: resolveServerOptions({ server, port })
+		})
 );
 const disconnect = Command.make(
 	'disconnect',
@@ -169,14 +164,14 @@ const reference = Command.make(
 	{
 		repo: Argument.string('repo')
 	},
-	({ repo }) => effectFromPromise(() => runReferenceCommand(repo))
+	({ repo }) => runReferenceCommand(repo)
 );
 const serve = Command.make(
 	'serve',
 	{
 		port: pipe(Flag.integer('port'), Flag.withAlias('p'), Flag.optional)
 	},
-	({ port }) => effectFromPromise(() => runServeCommand({ port: Option.getOrUndefined(port) }))
+	({ port }) => runServeCommand({ port: Option.getOrUndefined(port) })
 );
 const remove = Command.make(
 	'remove',
@@ -193,13 +188,13 @@ const remove = Command.make(
 			globalOpts: resolveServerOptions({ server, port })
 		})
 );
-const skill = Command.make('skill', {}, () => effectFromPromise(() => runSkillCommand()));
+const skill = Command.make('skill', {}, () => runSkillCommand());
 const telemetry = pipe(
 	Command.make('telemetry'),
 	Command.withSubcommands([
-		Command.make('on', {}, () => effectFromPromise(() => runTelemetryOnCommand())),
-		Command.make('off', {}, () => effectFromPromise(() => runTelemetryOffCommand())),
-		Command.make('status', {}, () => effectFromPromise(() => runTelemetryStatusCommand()))
+		Command.make('on', {}, () => runTelemetryOnCommand()),
+		Command.make('off', {}, () => runTelemetryOffCommand()),
+		Command.make('status', {}, () => runTelemetryStatusCommand())
 	])
 );
 const wipe = Command.make(
@@ -207,7 +202,7 @@ const wipe = Command.make(
 	{
 		yes: pipe(Flag.boolean('yes'), Flag.withAlias('y'))
 	},
-	({ yes }) => effectFromPromise(() => runWipeCommand({ yes }))
+	({ yes }) => runWipeCommand({ yes })
 );
 
 const root = pipe(

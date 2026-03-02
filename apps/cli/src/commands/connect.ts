@@ -4,7 +4,6 @@ import { spawn } from 'bun';
 import { Effect } from 'effect';
 import { withServerEffect } from '../server/manager.ts';
 import { createClient, getProviders, updateModel } from '../client/index.ts';
-import { effectFromPromise } from '../effect/errors.ts';
 import { dim, green } from '../lib/utils/colors.ts';
 import { loginCopilotOAuth } from '../lib/copilot-oauth.ts';
 import { loginOpenAIOAuth, saveProviderApiKey } from '../lib/opencode-oauth.ts';
@@ -191,163 +190,158 @@ const promptOpenAICompatSetup = async (options: { includeModel?: boolean } = {})
 	}
 };
 
-export const runConnectCommand = async (args: {
+export const runConnectCommand = (args: {
 	global?: boolean;
 	provider?: string;
 	model?: string;
 	globalOpts?: { server?: string; port?: number };
-}) => {
-	try {
-		await Effect.runPromise(
-			withServerEffect(
-				{
-					serverUrl: args.globalOpts?.server,
-					port: args.globalOpts?.port,
-					quiet: true
-				},
-				(server) =>
-					effectFromPromise(async () => {
-						const client = createClient(server.url);
-						const providers = await getProviders(client);
+}) =>
+	withServerEffect(
+		{
+			serverUrl: args.globalOpts?.server,
+			port: args.globalOpts?.port,
+			quiet: true
+		},
+		(server) =>
+			Effect.tryPromise(async () => {
+				try {
+					const client = createClient(server.url);
+					const providers = await getProviders(client);
 
-						if (args.provider && args.model) {
-							if (args.provider === 'openai-compat') {
-								const { baseURL, name, apiKey } = await promptOpenAICompatSetup({
-									includeModel: false
-								});
-								if (!baseURL || !name) {
-									throw new Error('Base URL and provider name are required.');
-								}
-								if (apiKey) {
-									await saveProviderApiKey(args.provider, apiKey);
-									console.log(`${args.provider} API key saved.`);
-								}
-								const updated = await updateModel(server.url, args.provider, args.model, {
-									baseURL,
-									name
-								});
-								console.log(`Model updated: ${updated.provider}/${updated.model}`);
-								return;
-							}
-
-							const updated = await updateModel(server.url, args.provider, args.model);
-							console.log(`Model updated: ${updated.provider}/${updated.model}`);
-
-							const info = PROVIDER_INFO[args.provider];
-							if (info?.requiresAuth && !providers.connected.includes(args.provider)) {
-								console.warn(`\nWarning: Provider "${args.provider}" is not connected.`);
-								console.warn('Run "opencode auth" to configure credentials.');
-							}
-							return;
+				if (args.provider && args.model) {
+					if (args.provider === 'openai-compat') {
+						const { baseURL, name, apiKey } = await promptOpenAICompatSetup({
+							includeModel: false
+						});
+						if (!baseURL || !name) {
+							throw new Error('Base URL and provider name are required.');
 						}
-
-						console.log('\n--- Configure AI Provider ---\n');
-						const providerOptions: { label: string; value: string }[] = [];
-
-						for (const connectedId of providers.connected) {
-							const info = PROVIDER_INFO[connectedId];
-							const label = info
-								? `${info.label} ${green('(connected)')}`
-								: `${connectedId} ${green('(connected)')}`;
-							providerOptions.push({ label, value: connectedId });
+						if (apiKey) {
+							await saveProviderApiKey(args.provider, apiKey);
+							console.log(`${args.provider} API key saved.`);
 						}
+						const updated = await updateModel(server.url, args.provider, args.model, {
+							baseURL,
+							name
+						});
+						console.log(`Model updated: ${updated.provider}/${updated.model}`);
+						return;
+					}
 
-						for (const provider of providers.all) {
-							if (!providers.connected.includes(provider.id)) {
-								const info = PROVIDER_INFO[provider.id];
-								const label = info ? info.label : provider.id;
-								providerOptions.push({ label, value: provider.id });
-							}
-						}
+					const updated = await updateModel(server.url, args.provider, args.model);
+					console.log(`Model updated: ${updated.provider}/${updated.model}`);
 
-						const provider = await promptSelect('Select a provider:', providerOptions);
-						const isConnected = providers.connected.includes(provider);
-						const info = PROVIDER_INFO[provider];
+					const info = PROVIDER_INFO[args.provider];
+					if (info?.requiresAuth && !providers.connected.includes(args.provider)) {
+						console.warn(`\nWarning: Provider "${args.provider}" is not connected.`);
+						console.warn('Run "opencode auth" to configure credentials.');
+					}
+					return;
+				}
 
-						if (!isConnected && info?.requiresAuth) {
-							console.log(`\nProvider "${provider}" requires authentication.`);
-							const guidance = PROVIDER_AUTH_GUIDANCE[provider];
-							if (guidance) {
-								console.log(`\n${guidance}`);
-							}
-							const success = await runBtcaAuth(provider);
-							if (!success) {
-								throw new Error(
-									'Authentication may have failed. Try again later with: opencode auth.'
-								);
-							}
-						}
+				console.log('\n--- Configure AI Provider ---\n');
+				const providerOptions: { label: string; value: string }[] = [];
 
-						if (provider === 'openai-compat') {
-							const modelDocs = PROVIDER_MODEL_DOCS[provider];
-							if (modelDocs) {
-								console.log(`\n${modelDocs.label}: ${modelDocs.url}`);
-							}
+				for (const connectedId of providers.connected) {
+					const info = PROVIDER_INFO[connectedId];
+					const label = info
+						? `${info.label} ${green('(connected)')}`
+						: `${connectedId} ${green('(connected)')}`;
+					providerOptions.push({ label, value: connectedId });
+				}
 
-							const { baseURL, name, modelId, apiKey } = await promptOpenAICompatSetup();
-							if (!baseURL || !name || !modelId) {
-								throw new Error('Base URL, provider name, and model ID are required.');
-							}
-							if (apiKey) {
-								await saveProviderApiKey(provider, apiKey);
-								console.log(`${provider} API key saved.`);
-							}
+				for (const provider of providers.all) {
+					if (!providers.connected.includes(provider.id)) {
+						const info = PROVIDER_INFO[provider.id];
+						const label = info ? info.label : provider.id;
+						providerOptions.push({ label, value: provider.id });
+					}
+				}
 
-							const updated = await updateModel(server.url, provider, modelId, { baseURL, name });
-							console.log(`\nModel configured: ${updated.provider}/${updated.model}`);
-							console.log(`\nSaved to: ${updated.savedTo} config`);
-							return;
-						}
+				const provider = await promptSelect('Select a provider:', providerOptions);
+				const isConnected = providers.connected.includes(provider);
+				const info = PROVIDER_INFO[provider];
 
-						let model: string;
-						const curated = CURATED_MODELS[provider] ?? [];
-						const modelDocs = PROVIDER_MODEL_DOCS[provider];
-						const modelWarning = PROVIDER_MODEL_WARNINGS[provider];
-						if (modelDocs) {
-							console.log(`\n${modelDocs.label}: ${modelDocs.url}`);
-						}
-						if (modelWarning) {
-							console.log(`\nHeads-up: ${modelWarning}`);
-						}
+				if (!isConnected && info?.requiresAuth) {
+					console.log(`\nProvider "${provider}" requires authentication.`);
+					const guidance = PROVIDER_AUTH_GUIDANCE[provider];
+					if (guidance) {
+						console.log(`\n${guidance}`);
+					}
+					const success = await runBtcaAuth(provider);
+					if (!success) {
+						throw new Error('Authentication may have failed. Try again later with: opencode auth.');
+					}
+				}
 
-						if (curated.length > 0) {
-							const options = [
-								...curated.map((modelItem) => ({ label: modelItem.label, value: modelItem.id })),
-								{ label: 'Custom model ID...', value: '__custom__' }
-							];
-							const selection = await promptSelect('Select a model:', options);
-							if (selection === '__custom__') {
-								const rl = createRl();
-								model = await promptInput(rl, 'Enter model ID');
-								rl.close();
-							} else {
-								model = selection;
-							}
-						} else {
-							console.log(`\nCurated models for ${provider} are coming soon.`);
-							const rl = createRl();
-							model = await promptInput(rl, 'Enter model ID');
-							rl.close();
-						}
+				if (provider === 'openai-compat') {
+					const modelDocs = PROVIDER_MODEL_DOCS[provider];
+					if (modelDocs) {
+						console.log(`\n${modelDocs.label}: ${modelDocs.url}`);
+					}
 
-						if (!model) {
-							throw new Error('Model ID is required.');
-						}
+					const { baseURL, name, modelId, apiKey } = await promptOpenAICompatSetup();
+					if (!baseURL || !name || !modelId) {
+						throw new Error('Base URL, provider name, and model ID are required.');
+					}
+					if (apiKey) {
+						await saveProviderApiKey(provider, apiKey);
+						console.log(`${provider} API key saved.`);
+					}
 
-						const updated = await updateModel(server.url, provider, model);
-						console.log(`\nModel configured: ${updated.provider}/${updated.model}`);
-						console.log(`\nSaved to: ${updated.savedTo} config`);
-					})
-			)
-		);
-	} catch (error) {
-		if (error instanceof Error && error.message === 'Invalid selection') {
-			throw new Error('Invalid selection. Please try again.');
-		}
-		if (isPromptCancelled(error)) {
-			console.log('\nSelection cancelled.');
-			return;
-		}
-		throw error;
-	}
-};
+					const updated = await updateModel(server.url, provider, modelId, { baseURL, name });
+					console.log(`\nModel configured: ${updated.provider}/${updated.model}`);
+					console.log(`\nSaved to: ${updated.savedTo} config`);
+					return;
+				}
+
+				let model: string;
+				const curated = CURATED_MODELS[provider] ?? [];
+				const modelDocs = PROVIDER_MODEL_DOCS[provider];
+				const modelWarning = PROVIDER_MODEL_WARNINGS[provider];
+				if (modelDocs) {
+					console.log(`\n${modelDocs.label}: ${modelDocs.url}`);
+				}
+				if (modelWarning) {
+					console.log(`\nHeads-up: ${modelWarning}`);
+				}
+
+				if (curated.length > 0) {
+					const options = [
+						...curated.map((modelItem) => ({ label: modelItem.label, value: modelItem.id })),
+						{ label: 'Custom model ID...', value: '__custom__' }
+					];
+					const selection = await promptSelect('Select a model:', options);
+					if (selection === '__custom__') {
+						const rl = createRl();
+						model = await promptInput(rl, 'Enter model ID');
+						rl.close();
+					} else {
+						model = selection;
+					}
+				} else {
+					console.log(`\nCurated models for ${provider} are coming soon.`);
+					const rl = createRl();
+					model = await promptInput(rl, 'Enter model ID');
+					rl.close();
+				}
+
+				if (!model) {
+					throw new Error('Model ID is required.');
+				}
+
+					const updated = await updateModel(server.url, provider, model);
+					console.log(`\nModel configured: ${updated.provider}/${updated.model}`);
+					console.log(`\nSaved to: ${updated.savedTo} config`);
+				} catch (error) {
+					if (error instanceof Error && error.message === 'Invalid selection') {
+						throw new Error('Invalid selection. Please try again.');
+					}
+					if (isPromptCancelled(error)) {
+						console.log('\nSelection cancelled.');
+						return;
+					}
+					throw error;
+				}
+			})
+	);

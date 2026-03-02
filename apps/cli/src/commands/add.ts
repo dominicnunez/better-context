@@ -5,8 +5,7 @@ import { Effect } from 'effect';
 
 import { addResource } from '../client/index.ts';
 import { dim } from '../lib/utils/colors.ts';
-import { withServerEffect } from '../server/manager.ts';
-import { effectFromPromise } from '../effect/errors.ts';
+import { ensureServer } from '../server/manager.ts';
 
 interface GitHubUrlParts {
 	owner: string;
@@ -263,16 +262,18 @@ const runWithServer = <A>(
 	globalOpts: { server?: string; port?: number } | undefined,
 	run: (serverUrl: string) => Promise<A>
 ) =>
-	Effect.runPromise(
-		withServerEffect(
-			{
-				serverUrl: globalOpts?.server,
-				port: globalOpts?.port,
-				quiet: true
-			},
-			(server) => effectFromPromise(() => run(server.url))
-		)
-	);
+	(async () => {
+		const server = await ensureServer({
+			serverUrl: globalOpts?.server,
+			port: globalOpts?.port,
+			quiet: true
+		});
+		try {
+			return await run(server.url);
+		} finally {
+			server.stop();
+		}
+	})();
 
 /**
  * Interactive wizard for adding a git resource.
@@ -480,7 +481,7 @@ const inferResourceType = async (value: string): Promise<'git' | 'local' | 'npm'
 	return 'local';
 };
 
-export const runAddCommand = async (args: {
+const runAddCommandPromise = async (args: {
 	reference?: string;
 	global?: boolean;
 	name?: string;
@@ -617,3 +618,14 @@ export const runAddCommand = async (args: {
 		throw error;
 	}
 };
+
+export const runAddCommand = (args: {
+	reference?: string;
+	global?: boolean;
+	name?: string;
+	branch?: string;
+	searchPath?: string[];
+	notes?: string;
+	type?: string;
+	globalOpts?: { server?: string; port?: number };
+}) => Effect.tryPromise(() => runAddCommandPromise(args));

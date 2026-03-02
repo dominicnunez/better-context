@@ -119,7 +119,7 @@ async function prompt(message: string): Promise<string | null> {
 /**
  * Launch the simple REPL mode (no TUI)
  */
-export async function launchRepl(options: ReplOptions): Promise<void> {
+const launchReplPromise = async (options: ReplOptions): Promise<void> => {
 	const showThinking = options.subAgent ? false : (options.thinking ?? true);
 	const showTools = options.subAgent ? false : (options.tools ?? true);
 
@@ -289,4 +289,7 @@ Examples:
 				})
 		)
 	);
-}
+};
+
+export const launchRepl = (options: ReplOptions) =>
+	Effect.tryPromise(() => launchReplPromise(options));

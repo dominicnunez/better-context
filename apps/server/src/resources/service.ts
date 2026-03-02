@@ -47,7 +47,7 @@ export type ResourcesService = {
 		options?: {
 			quiet?: boolean;
 		}
-	) => Effect.Effect<BtcaFsResource, ResourceError>;
+	) => Effect.Effect<BtcaFsResource, ResourceError, never>;
 };
 
 const normalizeSearchPaths = (definition: GitResource): string[] => {
@@ -154,11 +154,43 @@ export const resolveResourceDefinition = (
 };
 
 export const createResourcesService = (config: ConfigServiceShape): ResourcesService => {
+	const load: ResourcesService['load'] = async (name, options) => {
+		const quiet = options?.quiet ?? false;
+		const definition = resolveResourceDefinition(name, config.getResource);
+
+		if (isGitResource(definition)) {
+			try {
+				return await loadGitResource(definitionToGitArgs(definition, config.resourcesDirectory, quiet));
+			} catch (cause) {
+				if (cause instanceof ResourceError) throw cause;
+				throw new ResourceError({
+					message: `Failed to load git resource "${name}"`,
+					hint: CommonHints.CLEAR_CACHE,
+					cause
+				});
+			}
+		}
+
+		if (isNpmResource(definition)) {
+			try {
+				return await loadNpmResource(definitionToNpmArgs(definition, config.resourcesDirectory));
+			} catch (cause) {
+				if (cause instanceof ResourceError) throw cause;
+				throw new ResourceError({
+					message: `Failed to load npm resource "${name}"`,
+					hint: CommonHints.CLEAR_CACHE,
+					cause
+				});
+			}
+		}
+
+		return loadLocalResource(definitionToLocalArgs(definition));
+	};
+
 	const loadEffect: ResourcesService['loadEffect'] = (name, options) =>
 		Effect.gen(function* () {
-			const quiet = options?.quiet ?? false;
-			const definition = yield* Effect.try({
-				try: () => resolveResourceDefinition(name, config.getResource),
+			return yield* Effect.tryPromise({
+				try: () => load(name, options),
 				catch: (cause) =>
 					cause instanceof ResourceError
 						? cause
@@ -168,41 +200,10 @@ export const createResourcesService = (config: ConfigServiceShape): ResourcesSer
 								cause
 							})
 			});
-
-			if (isGitResource(definition)) {
-				return yield* Effect.tryPromise({
-					try: () =>
-						loadGitResource(definitionToGitArgs(definition, config.resourcesDirectory, quiet)),
-					catch: (cause) =>
-						cause instanceof ResourceError
-							? cause
-							: new ResourceError({
-									message: `Failed to load git resource "${name}"`,
-									hint: CommonHints.CLEAR_CACHE,
-									cause
-								})
-				});
-			}
-
-			if (isNpmResource(definition)) {
-				return yield* Effect.tryPromise({
-					try: () => loadNpmResource(definitionToNpmArgs(definition, config.resourcesDirectory)),
-					catch: (cause) =>
-						cause instanceof ResourceError
-							? cause
-							: new ResourceError({
-									message: `Failed to load npm resource "${name}"`,
-									hint: CommonHints.CLEAR_CACHE,
-									cause
-								})
-				});
-			}
-
-			return loadLocalResource(definitionToLocalArgs(definition));
 		});
 
 	return {
-		load: (name, options) => Effect.runPromise(loadEffect(name, options)),
+		load,
 		loadEffect
 	};
 };

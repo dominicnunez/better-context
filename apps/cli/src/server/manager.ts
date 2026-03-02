@@ -15,7 +15,7 @@ export interface EnsureServerOptions {
 
 const DEFAULT_TIMEOUT = 10000;
 
-const waitForHealthEffect = (url: string, timeout: number): Effect.Effect<void, unknown> =>
+const waitForHealthEffect = (url: string, timeout: number): Effect.Effect<void, unknown, never> =>
 	Effect.gen(function* () {
 		const startTime = Date.now();
 		const pollInterval = 100;
@@ -31,7 +31,7 @@ const waitForHealthEffect = (url: string, timeout: number): Effect.Effect<void, 
 				catch: () => false
 			});
 			if (isHealthy) return;
-			yield* Effect.sleep(`${pollInterval} millis`);
+			yield* Effect.tryPromise(() => Bun.sleep(pollInterval));
 		}
 
 		return yield* Effect.fail(new Error(`Server failed to start within ${timeout}ms`));
@@ -45,7 +45,7 @@ const waitForHealthEffect = (url: string, timeout: number): Effect.Effect<void, 
  */
 export const ensureServerEffect = (
 	options: EnsureServerOptions = {}
-): Effect.Effect<ServerManager, unknown> =>
+): Effect.Effect<ServerManager, unknown, never> =>
 	Effect.gen(function* () {
 		const { serverUrl, timeout = DEFAULT_TIMEOUT } = options;
 
@@ -77,8 +77,8 @@ export const ensureServer = (options: EnsureServerOptions = {}) =>
 
 export const withServerEffect = <A>(
 	options: EnsureServerOptions,
-	use: (server: ServerManager) => Effect.Effect<A, unknown>
-): Effect.Effect<A, unknown> =>
+	use: (server: ServerManager) => Effect.Effect<A, unknown, never>
+): Effect.Effect<A, unknown, never> =>
 	Effect.acquireUseRelease(ensureServerEffect(options), use, (server) =>
 		Effect.sync(() => server.stop())
 	);
