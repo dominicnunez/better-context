@@ -111,6 +111,8 @@ export function createOpenCodeZen(options: { apiKey: string }) {
  */
 export const OPENCODE_ZEN_MODELS = [
 	// GPT models
+	'gpt-5.4',
+	'gpt-5.3-codex-spark',
 	'gpt-5.2',
 	'gpt-5.2-codex',
 	'gpt-5.1',

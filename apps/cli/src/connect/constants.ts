@@ -1,7 +1,7 @@
 export const CURATED_MODELS: Record<string, { id: string; label: string }[]> = {
 	openai: [
 		{ id: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark' },
-		{ id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' }
+		{ id: 'gpt-5.4', label: 'GPT-5.4' }
 	],
 	'github-copilot': [
 		{ id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
@@ -13,7 +13,8 @@ export const CURATED_MODELS: Record<string, { id: string; label: string }[]> = {
 		{ id: 'gemini-3-flash', label: 'Gemini 3 Flash' },
 		{ id: 'glm-4.7', label: 'GLM 4.7' },
 		{ id: 'kimi-k2.5', label: 'Kimi K2.5' },
-		{ id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' }
+		{ id: 'gpt-5.4', label: 'GPT-5.4' },
+		{ id: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark' }
 	],
 	openrouter: [
 		{ id: 'anthropic/claude-haiku-4.5', label: 'Anthropic Claude Haiku 4.5' },

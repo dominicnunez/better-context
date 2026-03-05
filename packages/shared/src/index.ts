@@ -53,8 +53,15 @@ export const BLESSED_MODELS: BlessedModel[] = [
 	},
 	{
 		provider: 'opencode',
-		model: 'gpt-5.2-codex',
-		description: 'GPT-5.2 Codex via OpenCode Zen (API key).',
+		model: 'gpt-5.4',
+		description: 'GPT-5.4 via OpenCode Zen (API key).',
+		providerSetupUrl: 'https://opencode.ai/zen',
+		isDefault: false
+	},
+	{
+		provider: 'opencode',
+		model: 'gpt-5.3-codex-spark',
+		description: 'GPT-5.3 Codex Spark via OpenCode Zen (API key).',
 		providerSetupUrl: 'https://opencode.ai/zen',
 		isDefault: false
 	},
@@ -95,8 +102,8 @@ export const BLESSED_MODELS: BlessedModel[] = [
 	},
 	{
 		provider: 'openai',
-		model: 'gpt-5.3-codex',
-		description: 'GPT-5.3 Codex (OAuth; uses your ChatGPT subscription).',
+		model: 'gpt-5.4',
+		description: 'GPT-5.4 (OAuth; uses your ChatGPT subscription).',
 		providerSetupUrl: 'https://chatgpt.com',
 		isDefault: false
 	},

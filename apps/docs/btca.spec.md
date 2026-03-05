@@ -276,6 +276,11 @@ Behavior:
 - Otherwise, interactive provider selection (connected providers listed first), then model selection.
 - Prompts for auth if required.
 
+Current curated model choices in the interactive flow:
+
+- `openai`: `gpt-5.3-codex-spark`, `gpt-5.4`
+- `opencode`: `claude-haiku-4-5`, `claude-sonnet-4-6`, `gemini-3-flash`, `glm-4.7`, `kimi-k2.5`, `gpt-5.4`, `gpt-5.3-codex-spark`
+
 ### 4.8 `btca disconnect`
 
 Disconnect provider credentials.
