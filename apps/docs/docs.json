@@ -21,7 +21,9 @@
 			"weight": 400
 		}
 	},
-	"openapi": ["/api-reference/openapi.local.json", "/api-reference/openapi.cloud.json"],
+	"api": {
+		"openapi": ["/api-reference/openapi.local.json", "/api-reference/openapi.cloud.json"]
+	},
 	"favicon": "/favicon.svg",
 	"navigation": {
 		"tabs": [
